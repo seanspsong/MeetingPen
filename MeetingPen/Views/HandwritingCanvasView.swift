@@ -44,7 +44,7 @@ struct HandwritingCanvasView: UIViewRepresentable {
         // Configure canvas
         canvasView.drawing = drawing
         canvasView.delegate = context.coordinator
-        canvasView.allowsFingerDrawing = allowsFingerDrawing
+        canvasView.drawingPolicy = allowsFingerDrawing ? .anyInput : .pencilOnly
         canvasView.backgroundColor = UIColor.systemBackground
         
         // Configure tool picker
@@ -67,7 +67,7 @@ struct HandwritingCanvasView: UIViewRepresentable {
         }
         
         // Update finger drawing setting
-        canvasView.allowsFingerDrawing = allowsFingerDrawing
+        canvasView.drawingPolicy = allowsFingerDrawing ? .anyInput : .pencilOnly
     }
     
     func makeCoordinator() -> Coordinator {

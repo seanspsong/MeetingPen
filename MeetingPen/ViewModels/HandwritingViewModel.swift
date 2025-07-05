@@ -244,7 +244,7 @@ class HandwritingViewModel: ObservableObject {
         // Set defaults if not previously set
         if recognitionDelay == 0 { recognitionDelay = 1.0 }
         if minimumConfidence == 0 { minimumConfidence = 0.3 }
-        if !defaults.object(forKey: "handwriting.showRecognitionPreview") { showRecognitionPreview = true }
+        if defaults.object(forKey: "handwriting.showRecognitionPreview") == nil { showRecognitionPreview = true }
     }
     
     private func saveUserPreferences() {
@@ -350,23 +350,7 @@ extension TextElement: Codable {
     }
 }
 
-/// Extended handwriting errors
-extension HandwritingError {
-    case noDataFound
-    
-    var errorDescription: String? {
-        switch self {
-        case .noDataFound:
-            return "No handwriting data found"
-        case .noTextFound:
-            return "No text could be recognized in the handwriting"
-        case .imageConversionFailed:
-            return "Failed to convert drawing to image"
-        case .recognitionFailed:
-            return "Text recognition failed"
-        }
-    }
-}
+
 
 // MARK: - Notifications
 

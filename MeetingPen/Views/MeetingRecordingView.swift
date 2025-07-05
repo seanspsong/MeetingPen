@@ -4,13 +4,20 @@ import PencilKit
 /// Complete meeting recording view with handwriting recognition integration
 struct MeetingRecordingView: View {
     
+    // MARK: - Properties
+    let meeting: Meeting
+    @Binding var isPresented: Bool
+    
     // MARK: - State
     @StateObject private var handwritingViewModel = HandwritingViewModel()
     @State private var isRecording = false
     @State private var recordingDuration: TimeInterval = 0
-    @State private var meetingTitle = "Marketing Strategy Session"
     @State private var showingToolPicker = false
     @State private var showingSettings = false
+    
+    private var meetingTitle: String {
+        meeting.title
+    }
     
     // MARK: - Timer
     @State private var recordingTimer: Timer?
@@ -35,8 +42,7 @@ struct MeetingRecordingView: View {
         .navigationBarHidden(true)
         .onAppear {
             // Setup handwriting recognition for current meeting
-            let meetingId = UUID()
-            handwritingViewModel.loadFromMeeting(meetingId: meetingId)
+            handwritingViewModel.loadFromMeeting(meetingId: meeting.id)
         }
         .sheet(isPresented: $showingSettings) {
             HandwritingSettingsView(viewModel: handwritingViewModel)
@@ -84,6 +90,12 @@ struct MeetingRecordingView: View {
                     Image(systemName: "gear")
                         .font(.title2)
                         .foregroundColor(.blue)
+                }
+                
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -417,9 +429,7 @@ struct HandwritingSettingsView: View {
 
 // MARK: - Preview
 
-struct MeetingRecordingView_Previews: PreviewProvider {
-    static var previews: some View {
-        MeetingRecordingView()
-            .previewDevice("iPad Air (5th generation)")
-    }
+#Preview {
+    @State var isPresented = true
+    return MeetingRecordingView(meeting: Meeting.sampleMeetings[0], isPresented: $isPresented)
 } 

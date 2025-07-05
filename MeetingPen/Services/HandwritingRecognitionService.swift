@@ -5,7 +5,7 @@ import UIKit
 import Combine
 
 /// Service responsible for handwriting recognition using PencilKit and Vision Framework
-class HandwritingRecognitionService: ObservableObject {
+class HandwritingRecognitionService: NSObject, ObservableObject {
     
     // MARK: - Published Properties
     @Published var recognizedText: String = ""
@@ -13,7 +13,7 @@ class HandwritingRecognitionService: ObservableObject {
     @Published var recognitionError: Error?
     
     // MARK: - Private Properties
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
     private let processingQueue = DispatchQueue(label: "handwriting.processing", qos: .userInitiated)
     private var recognitionCache: [String: String] = [:]
     
@@ -162,7 +162,7 @@ class HandwritingRecognitionService: ObservableObject {
             height: bounds.size.height * scale
         )
         
-        let image = drawing.image(from: scaledBounds, scale: scale)
+        let image = drawing.imageWithWhiteBackground(from: scaledBounds, scale: scale)
         guard let cgImage = image.cgImage else {
             throw HandwritingError.imageConversionFailed
         }
@@ -178,7 +178,7 @@ class HandwritingRecognitionService: ObservableObject {
     
     private func filterDrawing(_ drawing: PKDrawing, in region: CGRect) -> PKDrawing {
         let filteredStrokes = drawing.strokes.filter { stroke in
-            let strokeBounds = stroke.path.boundingBox
+            let strokeBounds = stroke.renderBounds
             return region.intersects(strokeBounds)
         }
         
@@ -260,6 +260,7 @@ enum HandwritingError: Error, LocalizedError {
     case noTextFound
     case imageConversionFailed
     case recognitionFailed
+    case noDataFound
     
     var errorDescription: String? {
         switch self {
@@ -269,6 +270,8 @@ enum HandwritingError: Error, LocalizedError {
             return "Failed to convert drawing to image"
         case .recognitionFailed:
             return "Text recognition failed"
+        case .noDataFound:
+            return "No handwriting data found"
         }
     }
 }
@@ -277,21 +280,21 @@ enum HandwritingError: Error, LocalizedError {
 
 extension PKDrawing {
     /// Convert drawing to image with specified bounds and scale
-    func image(from rect: CGRect, scale: CGFloat) -> UIImage {
+    func imageWithWhiteBackground(from rect: CGRect, scale: CGFloat) -> UIImage {
+        // Use PKDrawing's built-in method to create an image
+        let drawingImage = self.image(from: rect, scale: scale)
+        
+        // Create a new image with white background
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
-        format.opaque = false
+        format.opaque = true
         
-        let renderer = UIGraphicsImageRenderer(bounds: rect, format: format)
+        let renderer = UIGraphicsImageRenderer(size: rect.size, format: format)
         
         return renderer.image { context in
             UIColor.white.setFill()
-            context.fill(rect)
-            
-            // Draw the strokes
-            for stroke in strokes {
-                stroke.path.stroke()
-            }
+            context.fill(CGRect(origin: .zero, size: rect.size))
+            drawingImage.draw(at: .zero)
         }
     }
 } 
