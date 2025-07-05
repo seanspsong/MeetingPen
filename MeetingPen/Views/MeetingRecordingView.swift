@@ -250,7 +250,7 @@ struct MeetingRecordingView: View {
                 HStack(spacing: 8) {
                     Button(action: {
                         print("📝 [DEBUG] Manual recognition button pressed")
-                        handwritingViewModel.recognizeCurrentDrawing()
+                        handwritingViewModel.forceRecognition()
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "magnifyingglass")
@@ -296,6 +296,23 @@ struct MeetingRecordingView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background((handwritingViewModel.autoRecognitionEnabled ? Color.orange : Color.green).opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    
+                    Button(action: {
+                        print("📝 [DEBUG] Reset service button pressed")
+                        handwritingViewModel.recognitionService.resetService()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "restart.circle")
+                                .font(.system(size: 11))
+                            Text("Reset Service")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.1))
                         .cornerRadius(6)
                     }
                 }

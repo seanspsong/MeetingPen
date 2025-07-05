@@ -97,23 +97,23 @@ struct HomeView: View {
         .padding(.vertical, 8)
     }
     
-    // MARK: - Meetings List
+    // MARK: - Meetings Grid
     
     private var meetingsList: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
-                if filteredMeetings.isEmpty {
-                    emptyStateView
-                } else {
+            if filteredMeetings.isEmpty {
+                emptyStateView
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
                     ForEach(filteredMeetings) { meeting in
-                        MeetingRowView(meeting: meeting)
+                        MeetingCardView(meeting: meeting)
                             .onTapGesture {
                                 selectedMeeting = meeting
                             }
                     }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal)
         }
         .refreshable {
             // Refresh meetings from server/storage
@@ -196,78 +196,106 @@ struct StatView: View {
     }
 }
 
-struct MeetingRowView: View {
+struct MeetingCardView: View {
     let meeting: Meeting
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with title and recording indicator
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
                     Text(meeting.title)
-                        .font(.headline)
+                        .font(.title3)
                         .fontWeight(.semibold)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                     
-                    HStack(spacing: 12) {
-                        Label(meeting.formattedDate, systemImage: "calendar")
-                        
-                        if meeting.duration > 0 {
-                            Label(meeting.formattedDuration, systemImage: "clock")
-                        }
-                        
-                        if !meeting.participants.isEmpty {
-                            Label("\(meeting.participants.count) participants", systemImage: "person.2")
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                // Recording indicator
-                if meeting.isRecording {
-                    HStack {
+                    Spacer()
+                    
+                    // Recording indicator
+                    if meeting.isRecording {
                         Circle()
                             .fill(Color.red)
                             .frame(width: 8, height: 8)
                             .animation(.easeInOut(duration: 1).repeatForever(), value: meeting.isRecording)
-                        
-                        Text("Recording")
-                            .font(.caption)
-                            .foregroundColor(.red)
                     }
+                }
+                
+                // Date
+                HStack {
+                    Image(systemName: "calendar")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(meeting.formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             
             // Summary
             if !meeting.summary.isEmpty {
                 Text(meeting.summary)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            } else {
+                Text("No summary available")
+                    .font(.caption)
+                    .foregroundColor(Color(.systemGray3))
+                    .italic()
             }
             
-            // Action Items Preview
-            if !meeting.actionItems.isEmpty {
-                HStack {
-                    Image(systemName: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+            Spacer()
+            
+            // Bottom info
+            VStack(alignment: .leading, spacing: 6) {
+                // Duration and participants
+                HStack(spacing: 12) {
+                    if meeting.duration > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            Text(meeting.formattedDuration)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                    }
                     
-                    Text("\(meeting.actionItems.count) action items")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    
-                    Spacer()
+                    if !meeting.participants.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.2")
+                                .font(.caption2)
+                            Text("\(meeting.participants.count)")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Action Items
+                if !meeting.actionItems.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                        
+                        Text("\(meeting.actionItems.count) action items")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
         }
-        .padding()
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: 200)
         .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(.systemGray5), lineWidth: 0.5)
+        )
     }
 }
 

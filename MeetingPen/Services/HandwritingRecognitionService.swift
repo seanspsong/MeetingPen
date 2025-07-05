@@ -16,6 +16,7 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     var cancellables = Set<AnyCancellable>()
     private let processingQueue = DispatchQueue(label: "handwriting.processing", qos: .userInitiated)
     private var recognitionCache: [String: String] = [:]
+    private var recognitionAttemptCount = 0
     
     // MARK: - Recognition Configuration
     private let recognitionLanguages = ["en-US", "en-GB"] // Can be expanded
@@ -105,7 +106,8 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     // MARK: - Private Methods
     
     private func performTextRecognition(drawing: PKDrawing, cacheKey: String?, completion: @escaping (Result<String, Error>) -> Void) {
-        print("🔍 [DEBUG] performTextRecognition called on background queue")
+        recognitionAttemptCount += 1
+        print("🔍 [DEBUG] performTextRecognition called on background queue (attempt #\(recognitionAttemptCount))")
         
         do {
             print("🔍 [DEBUG] Converting drawing to image...")
@@ -121,20 +123,20 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
             print("🔍 [DEBUG] Saved debug image to: \(debugImageURL.path)")
         }
         
-        // Create Vision request
+        // Create completely fresh Vision request each time
             let request = VNRecognizeTextRequest { [weak self] request, error in
-                print("🔍 [DEBUG] Vision request completed")
+                print("🔍 [DEBUG] Vision request completed with \(request.results?.count ?? 0) results")
                 self?.handleVisionResponse(request: request, error: error, cacheKey: cacheKey, completion: completion)
             }
             
-            // Configure recognition settings for handwriting
-            request.recognitionLevel = recognitionLevel
+            // Configure recognition settings for handwriting - more aggressive settings
+            request.recognitionLevel = .accurate  // Use accurate for better results
             request.recognitionLanguages = recognitionLanguages
             request.usesLanguageCorrection = false  // Disable for handwriting
-            request.minimumTextHeight = minimumTextHeight
+            request.minimumTextHeight = 0.0  // Accept any size text
             
             // Additional optimizations for handwriting
-            request.automaticallyDetectsLanguage = false  // Disable to reduce complexity
+            request.automaticallyDetectsLanguage = true  // Enable for better detection
             request.customWords = []  // Clear custom words
             
             // Use latest revision for best results
@@ -142,14 +144,19 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
                 request.revision = VNRecognizeTextRequestRevision3  // Latest revision
             }
             
+            print("🔍 [DEBUG] Vision request configured - Level: accurate, MinHeight: 0.0, AutoLanguage: true")
+            
             print("🔍 [DEBUG] Performing Vision recognition...")
             print("🔍 [DEBUG] Recognition level: \(recognitionLevel)")
             print("🔍 [DEBUG] Recognition languages: \(recognitionLanguages)")
             print("🔍 [DEBUG] Minimum text height: \(minimumTextHeight)")
             
-            // Perform recognition
+            // Perform recognition with fresh handler each time
+            print("🔍 [DEBUG] Creating fresh VNImageRequestHandler...")
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            print("🔍 [DEBUG] Performing Vision request...")
             try handler.perform([request])
+            print("🔍 [DEBUG] Vision request submitted successfully")
             
         } catch {
             print("🔍 [DEBUG] Error in performTextRecognition: \(error)")
@@ -215,9 +222,12 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     }
     
     private func convertDrawingToImage(_ drawing: PKDrawing) throws -> CGImage {
-        let bounds = drawing.bounds.isEmpty ? CGRect(x: 0, y: 0, width: 800, height: 600) : drawing.bounds
-        print("🔍 [DEBUG] Drawing bounds: \(bounds)")
-        print("🔍 [DEBUG] Drawing bounds empty: \(drawing.bounds.isEmpty)")
+        // Always use a fresh copy of the drawing to avoid state corruption
+        let freshDrawing = (try? PKDrawing(data: drawing.dataRepresentation())) ?? drawing
+        let bounds = freshDrawing.bounds.isEmpty ? CGRect(x: 0, y: 0, width: 800, height: 600) : freshDrawing.bounds
+        print("🔍 [DEBUG] Fresh drawing bounds: \(bounds)")
+        print("🔍 [DEBUG] Fresh drawing bounds empty: \(freshDrawing.bounds.isEmpty)")
+        print("🔍 [DEBUG] Fresh drawing strokes: \(freshDrawing.strokes.count)")
         
         let scale: CGFloat = 3.0 // Reasonable resolution to avoid memory issues
         
@@ -243,8 +253,8 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
             UIColor.white.setFill()
             context.fill(CGRect(origin: .zero, size: CGSize(width: scaledBounds.width, height: scaledBounds.height)))
             
-            // Get the original drawing
-            let originalImage = drawing.image(from: scaledBounds, scale: scale)
+            // Get the original drawing (using fresh copy)
+            let originalImage = freshDrawing.image(from: scaledBounds, scale: scale)
             
             // Draw with enhanced contrast - simplified approach to avoid memory issues
             context.cgContext.setBlendMode(.multiply)
@@ -269,17 +279,40 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
         return cgImage
     }
     
-    /// Clear the recognition cache
+    /// Clear the recognition cache and reset internal state
     func clearCache() {
-        print("🔍 [DEBUG] Clearing recognition cache")
+        print("🔍 [DEBUG] Clearing recognition cache (\(recognitionCache.count) items)")
         recognitionCache.removeAll()
+        
+        // Force memory cleanup
+        DispatchQueue.main.async {
+            // Trigger garbage collection
+            print("🔍 [DEBUG] Cache cleared, triggering cleanup")
+        }
+    }
+    
+    /// Reset the entire recognition service state
+    func resetService() {
+        print("🔍 [DEBUG] Resetting HandwritingRecognitionService (was at attempt #\(recognitionAttemptCount))")
+        recognitionCache.removeAll()
+        recognitionAttemptCount = 0
+        recognizedText = ""
+        isProcessing = false
+        recognitionError = nil
+        
+        // Clear any pending operations
+        NSObject.cancelPreviousPerformRequests(withTarget: self)
+        
+        print("🔍 [DEBUG] Service reset complete")
     }
     
     private func generateCacheKey(for drawing: PKDrawing) -> String {
-        // Create a hash based on drawing data for caching
+        // Create a hash based on drawing data and timestamp for better uniqueness
         let data = drawing.dataRepresentation()
-        let cacheKey = data.base64EncodedString().prefix(32).description
-        print("🔍 [DEBUG] Generated cache key: \(cacheKey) from \(data.count) bytes")
+        let timestamp = Date().timeIntervalSince1970
+        let combinedData = "\(data.base64EncodedString())-\(timestamp)".data(using: .utf8) ?? data
+        let cacheKey = combinedData.base64EncodedString().prefix(32).description
+        print("🔍 [DEBUG] Generated cache key: \(cacheKey) from \(data.count) bytes + timestamp")
         return cacheKey
     }
     

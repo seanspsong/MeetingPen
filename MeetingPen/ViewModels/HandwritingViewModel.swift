@@ -22,7 +22,7 @@ class HandwritingViewModel: ObservableObject {
     @Published var minimumConfidence: Float = 0.3
     
     // MARK: - Private Properties
-    private let recognitionService = HandwritingRecognitionService()
+    let recognitionService = HandwritingRecognitionService()  // Public access for debug controls
     private var cancellables = Set<AnyCancellable>()
     var meetingId: UUID?  // Made public for debug access
     var meetingStore: MeetingStore?
@@ -75,6 +75,13 @@ class HandwritingViewModel: ObservableObject {
     /// Start handwriting recognition for the current drawing (manual recognition bypasses cache)
     func recognizeCurrentDrawing() {
         performRecognition(bypassCache: true, source: "MANUAL")
+    }
+    
+    /// Force a completely fresh recognition attempt (clears cache first)
+    func forceRecognition() {
+        print("🖊️ [DEBUG] ForceRecognition: Clearing cache first")
+        recognitionService.clearCache()
+        performRecognition(bypassCache: true, source: "FORCE")
     }
     
     /// Perform automatic recognition (uses cache for performance)

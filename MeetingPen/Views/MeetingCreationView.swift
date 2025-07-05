@@ -18,7 +18,41 @@ struct MeetingCreationView: View {
     }
     
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // Custom navigation bar
+            HStack {
+                Button("Cancel") {
+                    dismissView()
+                }
+                .foregroundColor(.blue)
+                .padding(.leading)
+                
+                Spacer()
+                
+                Text("New Meeting")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button("Create") {
+                    createMeetingOnly()
+                }
+                .foregroundColor(.blue)
+                .fontWeight(.medium)
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.trailing)
+            }
+            .padding(.vertical, 12)
+            .background(Color(UIColor.systemBackground))
+            .overlay(
+                Rectangle()
+                    .frame(height: 0.5)
+                    .foregroundColor(Color(UIColor.separator)),
+                alignment: .bottom
+            )
+            
+            // Main content
             Form {
                 Section(header: Text("Meeting Details")) {
                     TextField("Meeting Title", text: $title)
@@ -96,22 +130,6 @@ struct MeetingCreationView: View {
                 
                 Section(header: Text("Templates")) {
                     templateButtons
-                }
-            }
-            .navigationTitle("New Meeting")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismissView()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create") {
-                        createMeetingOnly()
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
