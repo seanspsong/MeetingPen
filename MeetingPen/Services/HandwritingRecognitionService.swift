@@ -29,7 +29,16 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     ///   - drawing: The PKDrawing containing handwritten strokes
     ///   - completion: Completion handler with recognized text or error
     func recognizeText(from drawing: PKDrawing, completion: @escaping (Result<String, Error>) -> Void) {
-        print("🔍 [DEBUG] HandwritingRecognitionService.recognizeText called")
+        recognizeText(from: drawing, bypassCache: false, completion: completion)
+    }
+    
+    /// Recognize text from a PencilKit drawing with cache control
+    /// - Parameters:
+    ///   - drawing: The PKDrawing containing handwritten strokes
+    ///   - bypassCache: Whether to bypass the cache and force fresh recognition
+    ///   - completion: Completion handler with recognized text or error
+    func recognizeText(from drawing: PKDrawing, bypassCache: Bool, completion: @escaping (Result<String, Error>) -> Void) {
+        print("🔍 [DEBUG] HandwritingRecognitionService.recognizeText called (bypassCache: \(bypassCache))")
         print("🔍 [DEBUG] Drawing has \(drawing.strokes.count) strokes")
         
         guard !drawing.strokes.isEmpty else {
@@ -42,14 +51,19 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
         let cacheKey = generateCacheKey(for: drawing)
         print("🔍 [DEBUG] Cache key: \(cacheKey)")
         
-        // Check cache first
-        if let cachedText = recognitionCache[cacheKey] {
+        // Check cache first (unless bypassing)
+        if !bypassCache, let cachedText = recognitionCache[cacheKey] {
             print("🔍 [DEBUG] Found cached result: '\(cachedText)'")
             completion(.success(cachedText))
             return
         }
         
-        print("🔍 [DEBUG] No cached result, performing recognition on background queue")
+        if bypassCache {
+            print("🔍 [DEBUG] Bypassing cache, forcing fresh recognition")
+        } else {
+            print("🔍 [DEBUG] No cached result, performing recognition on background queue")
+        }
+        
         processingQueue.async { [weak self] in
             self?.performTextRecognition(drawing: drawing, cacheKey: cacheKey, completion: completion)
         }
@@ -255,10 +269,18 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
         return cgImage
     }
     
+    /// Clear the recognition cache
+    func clearCache() {
+        print("🔍 [DEBUG] Clearing recognition cache")
+        recognitionCache.removeAll()
+    }
+    
     private func generateCacheKey(for drawing: PKDrawing) -> String {
         // Create a hash based on drawing data for caching
         let data = drawing.dataRepresentation()
-        return data.base64EncodedString().prefix(32).description
+        let cacheKey = data.base64EncodedString().prefix(32).description
+        print("🔍 [DEBUG] Generated cache key: \(cacheKey) from \(data.count) bytes")
+        return cacheKey
     }
     
     private func filterDrawing(_ drawing: PKDrawing, in region: CGRect) -> PKDrawing {

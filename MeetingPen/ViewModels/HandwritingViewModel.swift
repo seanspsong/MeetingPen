@@ -72,9 +72,19 @@ class HandwritingViewModel: ObservableObject {
     
     // MARK: - Public Methods
     
-    /// Start handwriting recognition for the current drawing
+    /// Start handwriting recognition for the current drawing (manual recognition bypasses cache)
     func recognizeCurrentDrawing() {
-        print("🖊️ [DEBUG] HandwritingViewModel.recognizeCurrentDrawing() called")
+        performRecognition(bypassCache: true, source: "MANUAL")
+    }
+    
+    /// Perform automatic recognition (uses cache for performance)
+    func performAutoRecognition() {
+        performRecognition(bypassCache: false, source: "AUTO")
+    }
+    
+    /// Internal method to perform recognition with cache control
+    private func performRecognition(bypassCache: Bool, source: String) {
+        print("🖊️ [DEBUG] HandwritingViewModel.performRecognition() called (source: \(source), bypassCache: \(bypassCache))")
         print("🖊️ [DEBUG] Current drawing has \(currentDrawing.strokes.count) strokes")
         
         guard !currentDrawing.strokes.isEmpty else { 
@@ -82,21 +92,26 @@ class HandwritingViewModel: ObservableObject {
             return 
         }
         
-        print("🖊️ [DEBUG] Starting recognition service...")
+        if bypassCache {
+            print("🖊️ [DEBUG] Starting \(source) recognition service (bypassing cache)...")
+        } else {
+            print("🖊️ [DEBUG] Starting \(source) recognition service (using cache)...")
+        }
+        
         isRecognizing = true
         
-        recognitionService.recognizeText(from: currentDrawing) { [weak self] result in
+        recognitionService.recognizeText(from: currentDrawing, bypassCache: bypassCache) { [weak self] result in
             DispatchQueue.main.async {
-                print("🖊️ [DEBUG] Recognition service completed")
+                print("🖊️ [DEBUG] \(source) recognition service completed")
                 self?.isRecognizing = false
                 
                 switch result {
                 case .success(let text):
-                    print("🖊️ [DEBUG] Recognition SUCCESS: '\(text)'")
+                    print("🖊️ [DEBUG] \(source) recognition SUCCESS: '\(text)'")
                     self?.recognizedText = text
                     self?.saveRecognizedText(text)
                 case .failure(let error):
-                    print("🖊️ [DEBUG] Recognition FAILED: \(error)")
+                    print("🖊️ [DEBUG] \(source) recognition FAILED: \(error)")
                     self?.recognitionError = error
                 }
             }
@@ -133,10 +148,14 @@ class HandwritingViewModel: ObservableObject {
     
     /// Clear the current drawing and reset recognition state
     func clearDrawing() {
+        print("🖊️ [DEBUG] Clearing drawing and cache")
         currentDrawing = PKDrawing()
         recognizedText = ""
         textElements = []
         recognitionError = nil
+        
+        // Clear the recognition cache to ensure fresh processing
+        recognitionService.clearCache()
     }
     
     /// Save the current drawing and recognized text to the meeting
