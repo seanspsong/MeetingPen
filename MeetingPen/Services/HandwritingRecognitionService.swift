@@ -19,8 +19,8 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     
     // MARK: - Recognition Configuration
     private let recognitionLanguages = ["en-US", "en-GB"] // Can be expanded
-    private let minimumTextHeight: Float = 16.0
-    private let recognitionLevel: VNRequestTextRecognitionLevel = .accurate
+    private let minimumTextHeight: Float = 1.0  // Very small for finger drawings
+    private let recognitionLevel: VNRequestTextRecognitionLevel = .accurate  // Try accurate for better results
     
     // MARK: - Public Methods
     
@@ -29,21 +29,27 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     ///   - drawing: The PKDrawing containing handwritten strokes
     ///   - completion: Completion handler with recognized text or error
     func recognizeText(from drawing: PKDrawing, completion: @escaping (Result<String, Error>) -> Void) {
+        print("🔍 [DEBUG] HandwritingRecognitionService.recognizeText called")
+        print("🔍 [DEBUG] Drawing has \(drawing.strokes.count) strokes")
         
         guard !drawing.strokes.isEmpty else {
+            print("🔍 [DEBUG] No strokes found, returning empty string")
             completion(.success(""))
             return
         }
         
         // Generate cache key based on drawing data
         let cacheKey = generateCacheKey(for: drawing)
+        print("🔍 [DEBUG] Cache key: \(cacheKey)")
         
         // Check cache first
         if let cachedText = recognitionCache[cacheKey] {
+            print("🔍 [DEBUG] Found cached result: '\(cachedText)'")
             completion(.success(cachedText))
             return
         }
         
+        print("🔍 [DEBUG] No cached result, performing recognition on background queue")
         processingQueue.async { [weak self] in
             self?.performTextRecognition(drawing: drawing, cacheKey: cacheKey, completion: completion)
         }
@@ -85,27 +91,54 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     // MARK: - Private Methods
     
     private func performTextRecognition(drawing: PKDrawing, cacheKey: String?, completion: @escaping (Result<String, Error>) -> Void) {
+        print("🔍 [DEBUG] performTextRecognition called on background queue")
         
         do {
+            print("🔍 [DEBUG] Converting drawing to image...")
             // Convert drawing to image
             let image = try convertDrawingToImage(drawing)
-            
-            // Create Vision request
+                    print("🔍 [DEBUG] Image conversion successful - size: \(image.width)x\(image.height)")
+        
+        // Save image for debugging (temporary)
+        if let imageData = UIImage(cgImage: image).pngData() {
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let debugImageURL = documentsPath.appendingPathComponent("debug_handwriting.png")
+            try? imageData.write(to: debugImageURL)
+            print("🔍 [DEBUG] Saved debug image to: \(debugImageURL.path)")
+        }
+        
+        // Create Vision request
             let request = VNRecognizeTextRequest { [weak self] request, error in
+                print("🔍 [DEBUG] Vision request completed")
                 self?.handleVisionResponse(request: request, error: error, cacheKey: cacheKey, completion: completion)
             }
             
-            // Configure recognition settings
+            // Configure recognition settings for handwriting
             request.recognitionLevel = recognitionLevel
             request.recognitionLanguages = recognitionLanguages
-            request.usesLanguageCorrection = true
+            request.usesLanguageCorrection = false  // Disable for handwriting
             request.minimumTextHeight = minimumTextHeight
+            
+            // Additional optimizations for handwriting
+            request.automaticallyDetectsLanguage = false  // Disable to reduce complexity
+            request.customWords = []  // Clear custom words
+            
+            // Use latest revision for best results
+            if #available(iOS 16.0, *) {
+                request.revision = VNRecognizeTextRequestRevision3  // Latest revision
+            }
+            
+            print("🔍 [DEBUG] Performing Vision recognition...")
+            print("🔍 [DEBUG] Recognition level: \(recognitionLevel)")
+            print("🔍 [DEBUG] Recognition languages: \(recognitionLanguages)")
+            print("🔍 [DEBUG] Minimum text height: \(minimumTextHeight)")
             
             // Perform recognition
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             try handler.perform([request])
             
         } catch {
+            print("🔍 [DEBUG] Error in performTextRecognition: \(error)")
             DispatchQueue.main.async {
                 completion(.failure(error))
             }
@@ -113,22 +146,29 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     }
     
     private func handleVisionResponse(request: VNRequest, error: Error?, cacheKey: String?, completion: @escaping (Result<String, Error>) -> Void) {
+        print("🔍 [DEBUG] handleVisionResponse called")
         
         DispatchQueue.main.async { [weak self] in
             if let error = error {
+                print("🔍 [DEBUG] Vision error: \(error)")
                 completion(.failure(error))
                 return
             }
             
             guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                print("🔍 [DEBUG] No text observations found")
                 completion(.failure(HandwritingError.noTextFound))
                 return
             }
             
+            print("🔍 [DEBUG] Found \(observations.count) text observations")
+            
             let recognizedText = self?.processObservations(observations) ?? ""
+            print("🔍 [DEBUG] Processed observations result: '\(recognizedText)'")
             
             // Cache the result
             if let cacheKey = cacheKey {
+                print("🔍 [DEBUG] Caching result with key: \(cacheKey)")
                 self?.recognitionCache[cacheKey] = recognizedText
             }
             
@@ -137,33 +177,78 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     }
     
     private func processObservations(_ observations: [VNRecognizedTextObservation]) -> String {
+        print("🔍 [DEBUG] processObservations called with \(observations.count) observations")
         var recognizedStrings: [String] = []
         
-        for observation in observations {
-            guard let topCandidate = observation.topCandidates(1).first else { continue }
+        for (index, observation) in observations.enumerated() {
+            print("🔍 [DEBUG] Processing observation \(index + 1)")
             
-            // Filter out low-confidence results
-            if topCandidate.confidence > 0.3 {
-                recognizedStrings.append(topCandidate.string)
+            guard let topCandidate = observation.topCandidates(1).first else { 
+                print("🔍 [DEBUG] No top candidate for observation \(index + 1)")
+                continue 
             }
+            
+            print("🔍 [DEBUG] Top candidate: '\(topCandidate.string)' (confidence: \(topCandidate.confidence))")
+            
+            // Accept ALL results regardless of confidence for testing
+            print("🔍 [DEBUG] Accepting all results (no confidence threshold)")
+            recognizedStrings.append(topCandidate.string)
         }
         
-        return recognizedStrings.joined(separator: " ")
+        let result = recognizedStrings.joined(separator: " ")
+        print("🔍 [DEBUG] Final recognized text: '\(result)'")
+        return result
     }
     
     private func convertDrawingToImage(_ drawing: PKDrawing) throws -> CGImage {
         let bounds = drawing.bounds.isEmpty ? CGRect(x: 0, y: 0, width: 800, height: 600) : drawing.bounds
-        let scale: CGFloat = 2.0 // Higher resolution for better recognition
+        print("🔍 [DEBUG] Drawing bounds: \(bounds)")
+        print("🔍 [DEBUG] Drawing bounds empty: \(drawing.bounds.isEmpty)")
         
-        let scaledBounds = CGRect(
-            x: bounds.origin.x * scale,
-            y: bounds.origin.y * scale,
-            width: bounds.size.width * scale,
-            height: bounds.size.height * scale
+        let scale: CGFloat = 3.0 // Reasonable resolution to avoid memory issues
+        
+        // Add reasonable padding around the bounds for better recognition
+        let padding: CGFloat = 50
+        let paddedBounds = CGRect(
+            x: bounds.origin.x - padding,
+            y: bounds.origin.y - padding,
+            width: bounds.size.width + (padding * 2),
+            height: bounds.size.height + (padding * 2)
         )
         
-        let image = drawing.imageWithWhiteBackground(from: scaledBounds, scale: scale)
-        guard let cgImage = image.cgImage else {
+        let scaledBounds = CGRect(
+            x: paddedBounds.origin.x * scale,
+            y: paddedBounds.origin.y * scale,
+            width: paddedBounds.size.width * scale,
+            height: paddedBounds.size.height * scale
+        )
+        
+        // Create enhanced image with better contrast but more memory-efficient
+        let enhancedImage = UIGraphicsImageRenderer(size: CGSize(width: scaledBounds.width, height: scaledBounds.height)).image { context in
+            // Fill with pure white background
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: CGSize(width: scaledBounds.width, height: scaledBounds.height)))
+            
+            // Get the original drawing
+            let originalImage = drawing.image(from: scaledBounds, scale: scale)
+            
+            // Draw with enhanced contrast - simplified approach to avoid memory issues
+            context.cgContext.setBlendMode(.multiply)
+            context.cgContext.setAlpha(1.0)
+            
+            // Draw just a few times to thicken strokes without causing crashes
+            let offsets: [CGPoint] = [
+                CGPoint(x: -1, y: -1), CGPoint(x: 0, y: -1), CGPoint(x: 1, y: -1),
+                CGPoint(x: -1, y: 0),  CGPoint(x: 0, y: 0),  CGPoint(x: 1, y: 0),
+                CGPoint(x: -1, y: 1),  CGPoint(x: 0, y: 1),  CGPoint(x: 1, y: 1)
+            ]
+            
+            for offset in offsets {
+                originalImage.draw(at: offset)
+            }
+        }
+        
+        guard let cgImage = enhancedImage.cgImage else {
             throw HandwritingError.imageConversionFailed
         }
         

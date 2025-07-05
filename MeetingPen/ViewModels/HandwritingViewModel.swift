@@ -13,7 +13,7 @@ class HandwritingViewModel: ObservableObject {
     @Published var recognitionError: Error?
     @Published var textElements: [TextElement] = []
     @Published var selectedTool: PKTool = PKInkingTool(.pen, color: .black, width: 2)
-    @Published var allowsFingerDrawing = false
+    @Published var allowsFingerDrawing = true  // Default ON for testing
     @Published var showRecognitionPreview = true
     
     // MARK: - Recognition Settings
@@ -24,12 +24,14 @@ class HandwritingViewModel: ObservableObject {
     // MARK: - Private Properties
     private let recognitionService = HandwritingRecognitionService()
     private var cancellables = Set<AnyCancellable>()
-    private var meetingId: UUID?
+    var meetingId: UUID?  // Made public for debug access
+    var meetingStore: MeetingStore?
     
     // MARK: - Initialization
     
-    init(meetingId: UUID? = nil) {
+    init(meetingId: UUID? = nil, meetingStore: MeetingStore? = nil) {
         self.meetingId = meetingId
+        self.meetingStore = meetingStore
         setupObservers()
         configureInitialSettings()
     }
@@ -72,15 +74,29 @@ class HandwritingViewModel: ObservableObject {
     
     /// Start handwriting recognition for the current drawing
     func recognizeCurrentDrawing() {
-        guard !currentDrawing.strokes.isEmpty else { return }
+        print("🖊️ [DEBUG] HandwritingViewModel.recognizeCurrentDrawing() called")
+        print("🖊️ [DEBUG] Current drawing has \(currentDrawing.strokes.count) strokes")
+        
+        guard !currentDrawing.strokes.isEmpty else { 
+            print("🖊️ [DEBUG] No strokes found, returning early")
+            return 
+        }
+        
+        print("🖊️ [DEBUG] Starting recognition service...")
+        isRecognizing = true
         
         recognitionService.recognizeText(from: currentDrawing) { [weak self] result in
             DispatchQueue.main.async {
+                print("🖊️ [DEBUG] Recognition service completed")
+                self?.isRecognizing = false
+                
                 switch result {
                 case .success(let text):
+                    print("🖊️ [DEBUG] Recognition SUCCESS: '\(text)'")
                     self?.recognizedText = text
                     self?.saveRecognizedText(text)
                 case .failure(let error):
+                    print("🖊️ [DEBUG] Recognition FAILED: \(error)")
                     self?.recognitionError = error
                 }
             }
@@ -125,37 +141,53 @@ class HandwritingViewModel: ObservableObject {
     
     /// Save the current drawing and recognized text to the meeting
     func saveToMeeting() {
-        guard let meetingId = meetingId else { return }
+        print("🖊️ [DEBUG] saveToMeeting() called")
+        print("🖊️ [DEBUG] meetingId: \(meetingId?.uuidString ?? "nil")")
+        print("🖊️ [DEBUG] meetingStore: \(meetingStore != nil ? "exists" : "nil")")
+        print("🖊️ [DEBUG] recognizedText: '\(recognizedText)'")
         
-        // Save drawing data
-        let drawingData = currentDrawing.dataRepresentation()
+        guard let meetingId = meetingId,
+              let meetingStore = meetingStore,
+              let meeting = meetingStore.meetings.first(where: { $0.id == meetingId }) else { 
+            print("🖊️ [DEBUG] Cannot save: missing meetingId, meetingStore, or meeting")
+            return 
+        }
         
-        // Save to meeting (this would integrate with your data layer)
-        saveMeetingHandwriting(
-            meetingId: meetingId,
-            drawingData: drawingData,
-            recognizedText: recognizedText,
-            textElements: textElements
-        )
+        print("🖊️ [DEBUG] Found meeting: '\(meeting.title)'")
+        print("🖊️ [DEBUG] Current handwritten notes: '\(meeting.handwrittenNotes)'")
+        
+        // Update the meeting with handwritten notes
+        meetingStore.updateMeetingHandwrittenNotes(meeting, notes: recognizedText)
+        
+        // Also save drawing data to the meeting
+        var updatedMeeting = meeting
+        updatedMeeting.drawingData = currentDrawing.dataRepresentation()
+        meetingStore.updateMeeting(updatedMeeting)
+        
+        print("✅ [DEBUG] Saved handwriting to meeting: '\(recognizedText)'")
+        print("🖊️ [DEBUG] Updated meeting handwritten notes: '\(updatedMeeting.handwrittenNotes)'")
     }
     
     /// Load drawing and recognized text from a meeting
     func loadFromMeeting(meetingId: UUID) {
         self.meetingId = meetingId
         
-        // Load from meeting (this would integrate with your data layer)
-        loadMeetingHandwriting(meetingId: meetingId) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let handwritingData):
-                    self?.currentDrawing = handwritingData.drawing
-                    self?.recognizedText = handwritingData.recognizedText
-                    self?.textElements = handwritingData.textElements
-                case .failure(let error):
-                    self?.recognitionError = error
-                }
-            }
+        guard let meetingStore = meetingStore,
+              let meeting = meetingStore.meetings.first(where: { $0.id == meetingId }) else { 
+            print("Cannot load: missing meetingStore or meeting")
+            return 
         }
+        
+        // Load handwritten notes
+        recognizedText = meeting.handwrittenNotes
+        
+        // Load drawing data if available
+        if let drawingData = meeting.drawingData,
+           let drawing = try? PKDrawing(data: drawingData) {
+            currentDrawing = drawing
+        }
+        
+        print("📖 Loaded handwriting from meeting: '\(recognizedText)'")
     }
     
     // MARK: - Drawing Tools
@@ -217,14 +249,27 @@ class HandwritingViewModel: ObservableObject {
     }
     
     private func saveRecognizedText(_ text: String) {
-        guard !text.isEmpty else { return }
+        print("🖊️ [DEBUG] saveRecognizedText() called with: '\(text)'")
+        
+        guard !text.isEmpty else { 
+            print("🖊️ [DEBUG] Text is empty, returning early")
+            return 
+        }
+        
+        print("🖊️ [DEBUG] Extracting text elements...")
+        // Extract text elements when recognition is complete
+        extractTextElements()
         
         // Auto-save recognized text to meeting if enabled
         if autoRecognitionEnabled {
+            print("🖊️ [DEBUG] Auto-recognition enabled, saving to meeting...")
             saveToMeeting()
+        } else {
+            print("🖊️ [DEBUG] Auto-recognition disabled, not saving to meeting")
         }
         
         // Post notification for other parts of the app
+        print("🖊️ [DEBUG] Posting handwriting recognized notification")
         NotificationCenter.default.post(
             name: .handwritingRecognized,
             object: self,
@@ -235,15 +280,22 @@ class HandwritingViewModel: ObservableObject {
     private func loadUserPreferences() {
         let defaults = UserDefaults.standard
         
-        autoRecognitionEnabled = defaults.bool(forKey: "handwriting.autoRecognition") 
+        // Set defaults if not previously set
+        if defaults.object(forKey: "handwriting.autoRecognition") == nil {
+            autoRecognitionEnabled = false  // Default to disabled for testing
+        } else {
+            autoRecognitionEnabled = defaults.bool(forKey: "handwriting.autoRecognition")
+        }
+        
         recognitionDelay = defaults.double(forKey: "handwriting.recognitionDelay")
         minimumConfidence = defaults.float(forKey: "handwriting.minimumConfidence")
         allowsFingerDrawing = defaults.bool(forKey: "handwriting.allowsFingerDrawing")
         showRecognitionPreview = defaults.bool(forKey: "handwriting.showRecognitionPreview")
         
-        // Set defaults if not previously set
+        // Set other defaults if not previously set
         if recognitionDelay == 0 { recognitionDelay = 1.0 }
         if minimumConfidence == 0 { minimumConfidence = 0.3 }
+        if defaults.object(forKey: "handwriting.allowsFingerDrawing") == nil { allowsFingerDrawing = true }
         if defaults.object(forKey: "handwriting.showRecognitionPreview") == nil { showRecognitionPreview = true }
     }
     
@@ -257,52 +309,6 @@ class HandwritingViewModel: ObservableObject {
         defaults.set(showRecognitionPreview, forKey: "handwriting.showRecognitionPreview")
     }
     
-    // MARK: - Data Integration (Placeholder)
-    
-    private func saveMeetingHandwriting(
-        meetingId: UUID,
-        drawingData: Data,
-        recognizedText: String,
-        textElements: [TextElement]
-    ) {
-        // This would integrate with your Core Data or CloudKit implementation
-        // For now, we'll just save to UserDefaults as a placeholder
-        
-        let handwritingData = HandwritingData(
-            meetingId: meetingId,
-            drawingData: drawingData,
-            recognizedText: recognizedText,
-            textElements: textElements,
-            timestamp: Date()
-        )
-        
-        // Save to persistent storage
-        saveHandwritingData(handwritingData)
-    }
-    
-    private func loadMeetingHandwriting(meetingId: UUID, completion: @escaping (Result<HandwritingData, Error>) -> Void) {
-        // This would integrate with your Core Data or CloudKit implementation
-        // For now, we'll just load from UserDefaults as a placeholder
-        
-        loadHandwritingData(for: meetingId, completion: completion)
-    }
-    
-    private func saveHandwritingData(_ data: HandwritingData) {
-        // Placeholder implementation - replace with actual data persistence
-        if let encoded = try? JSONEncoder().encode(data) {
-            UserDefaults.standard.set(encoded, forKey: "handwriting.\(data.meetingId)")
-        }
-    }
-    
-    private func loadHandwritingData(for meetingId: UUID, completion: @escaping (Result<HandwritingData, Error>) -> Void) {
-        // Placeholder implementation - replace with actual data loading
-        if let data = UserDefaults.standard.data(forKey: "handwriting.\(meetingId)"),
-           let handwritingData = try? JSONDecoder().decode(HandwritingData.self, from: data) {
-            completion(.success(handwritingData))
-        } else {
-            completion(.failure(HandwritingError.noDataFound))
-        }
-    }
 }
 
 // MARK: - Supporting Types

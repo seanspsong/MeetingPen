@@ -77,7 +77,7 @@ struct MyView: View {
         HandwritingCanvasView(
             drawing: $drawing,
             recognizedText: $recognizedText,
-            allowsFingerDrawing: false,  // Apple Pencil only
+            allowsFingerDrawing: true,   // Finger drawing enabled by default for testing
             showRecognitionPreview: true,
             recognitionDelay: 1.0        // 1 second delay
         )

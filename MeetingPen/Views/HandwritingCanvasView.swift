@@ -15,8 +15,11 @@ struct HandwritingCanvasView: UIViewRepresentable {
     let showRecognitionPreview: Bool
     let recognitionDelay: TimeInterval
     
+    // MARK: - Callbacks
+    let onDrawingChange: ((PKDrawing) -> Void)?
+    let onRecognitionTrigger: ((PKDrawing) -> Void)?
+    
     // MARK: - State
-    @StateObject private var recognitionService = HandwritingRecognitionService()
     @State private var canvasView: PKCanvasView?
     
     // MARK: - Initialization
@@ -24,9 +27,11 @@ struct HandwritingCanvasView: UIViewRepresentable {
         drawing: Binding<PKDrawing>,
         recognizedText: Binding<String>,
         isRecognizing: Binding<Bool> = .constant(false),
-        allowsFingerDrawing: Bool = false,
+        allowsFingerDrawing: Bool = true,  // Default ON for testing
         showRecognitionPreview: Bool = true,
-        recognitionDelay: TimeInterval = 1.0
+        recognitionDelay: TimeInterval = 1.0,
+        onDrawingChange: ((PKDrawing) -> Void)? = nil,
+        onRecognitionTrigger: ((PKDrawing) -> Void)? = nil
     ) {
         self._drawing = drawing
         self._recognizedText = recognizedText
@@ -34,6 +39,8 @@ struct HandwritingCanvasView: UIViewRepresentable {
         self.allowsFingerDrawing = allowsFingerDrawing
         self.showRecognitionPreview = showRecognitionPreview
         self.recognitionDelay = recognitionDelay
+        self.onDrawingChange = onDrawingChange
+        self.onRecognitionTrigger = onRecognitionTrigger
     }
     
     // MARK: - UIViewRepresentable
@@ -83,34 +90,22 @@ struct HandwritingCanvasView: UIViewRepresentable {
         init(_ parent: HandwritingCanvasView) {
             self.parent = parent
             super.init()
-            
-            // Setup recognition service observers
-            setupRecognitionObservers()
-        }
-        
-        private func setupRecognitionObservers() {
-            parent.recognitionService.$recognizedText
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] text in
-                    self?.parent.recognizedText = text
-                }
-                .store(in: &parent.recognitionService.cancellables)
-            
-            parent.recognitionService.$isProcessing
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] isProcessing in
-                    self?.parent.isRecognizing = isProcessing
-                }
-                .store(in: &parent.recognitionService.cancellables)
         }
         
         // MARK: - PKCanvasViewDelegate
         
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            print("🎨 [DEBUG] canvasViewDrawingDidChange called - strokes: \(canvasView.drawing.strokes.count)")
+            
             // Update the binding
             parent.drawing = canvasView.drawing
             
+            // Notify parent of drawing change
+            print("🎨 [DEBUG] Calling onDrawingChange callback...")
+            parent.onDrawingChange?(canvasView.drawing)
+            
             // Schedule text recognition
+            print("🎨 [DEBUG] Scheduling text recognition...")
             scheduleTextRecognition(for: canvasView.drawing)
         }
         
@@ -119,35 +114,36 @@ struct HandwritingCanvasView: UIViewRepresentable {
         }
         
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            print("🎨 [DEBUG] canvasViewDidEndUsingTool called - triggering immediate recognition")
             // Trigger immediate recognition when user stops drawing
-            performTextRecognition(for: canvasView.drawing)
+            triggerRecognition(for: canvasView.drawing)
         }
         
         // MARK: - Text Recognition
         
         private func scheduleTextRecognition(for drawing: PKDrawing) {
-            guard parent.showRecognitionPreview else { return }
+            print("🎨 [DEBUG] scheduleTextRecognition called")
+            
+            guard parent.showRecognitionPreview else { 
+                print("🎨 [DEBUG] Recognition preview disabled, skipping")
+                return 
+            }
+            
+            print("🎨 [DEBUG] Scheduling recognition with delay: \(parent.recognitionDelay)s")
             
             // Cancel previous timer
             recognitionTimer?.invalidate()
             
             // Schedule new recognition
             recognitionTimer = Timer.scheduledTimer(withTimeInterval: parent.recognitionDelay, repeats: false) { [weak self] _ in
-                self?.performTextRecognition(for: drawing)
+                print("🎨 [DEBUG] Recognition timer fired!")
+                self?.triggerRecognition(for: drawing)
             }
         }
         
-        private func performTextRecognition(for drawing: PKDrawing) {
-            parent.recognitionService.recognizeText(from: drawing) { result in
-                switch result {
-                case .success(let text):
-                    DispatchQueue.main.async {
-                        self.parent.recognizedText = text
-                    }
-                case .failure(let error):
-                    print("Text recognition failed: \(error)")
-                }
-            }
+        private func triggerRecognition(for drawing: PKDrawing) {
+            print("🎨 [DEBUG] triggerRecognition called with \(drawing.strokes.count) strokes")
+            parent.onRecognitionTrigger?(drawing)
         }
     }
 }
@@ -180,16 +176,7 @@ extension HandwritingCanvasView {
     
     /// Manually trigger text recognition
     func recognizeText() {
-        recognitionService.recognizeText(from: drawing) { result in
-            switch result {
-            case .success(let text):
-                DispatchQueue.main.async {
-                    self.recognizedText = text
-                }
-            case .failure(let error):
-                print("Manual text recognition failed: \(error)")
-            }
-        }
+        onRecognitionTrigger?(drawing)
     }
 }
 
@@ -222,7 +209,13 @@ struct HandwritingCanvasPreview: View {
                 recognizedText: $recognizedText,
                 isRecognizing: $isRecognizing,
                 allowsFingerDrawing: true,
-                showRecognitionPreview: true
+                showRecognitionPreview: true,
+                onDrawingChange: { drawing in
+                    // Handle drawing changes
+                },
+                onRecognitionTrigger: { drawing in
+                    // Handle recognition trigger
+                }
             )
             .frame(height: 400)
             .border(Color.gray.opacity(0.3))

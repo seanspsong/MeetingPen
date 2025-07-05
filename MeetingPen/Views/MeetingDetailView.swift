@@ -15,44 +15,42 @@ struct MeetingDetailView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Header
-                meetingHeader
+        VStack(spacing: 0) {
+            // Header
+            meetingHeader
+            
+            // Tab View
+            TabView(selection: $selectedTab) {
+                summaryTab
+                    .tabItem {
+                        Image(systemName: "doc.text")
+                        Text("Summary")
+                    }
+                    .tag(0)
                 
-                // Tab View
-                TabView(selection: $selectedTab) {
-                    summaryTab
-                        .tabItem {
-                            Image(systemName: "doc.text")
-                            Text("Summary")
-                        }
-                        .tag(0)
-                    
-                    transcriptTab
-                        .tabItem {
-                            Image(systemName: "waveform")
-                            Text("Transcript")
-                        }
-                        .tag(1)
-                    
-                    notesTab
-                        .tabItem {
-                            Image(systemName: "pencil")
-                            Text("Notes")
-                        }
-                        .tag(2)
-                    
-                    actionItemsTab
-                        .tabItem {
-                            Image(systemName: "checklist")
-                            Text("Actions")
-                        }
-                        .tag(3)
-                }
+                transcriptTab
+                    .tabItem {
+                        Image(systemName: "waveform")
+                        Text("Transcript")
+                    }
+                    .tag(1)
+                
+                notesTab
+                    .tabItem {
+                        Image(systemName: "pencil")
+                        Text("Notes")
+                    }
+                    .tag(2)
+                
+                actionItemsTab
+                    .tabItem {
+                        Image(systemName: "checklist")
+                        Text("Actions")
+                    }
+                    .tag(3)
             }
-            .navigationBarHidden(true)
         }
+        .navigationBarHidden(true)
         .sheet(isPresented: $showingEditSheet) {
             MeetingEditView(meeting: $meeting, onSave: { updatedMeeting in
                 meetingStore.updateMeeting(updatedMeeting)
@@ -481,29 +479,27 @@ struct ShareSheet: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Share Meeting")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                VStack(spacing: 16) {
-                    ShareOptionRow(icon: "doc.text", title: "Export as PDF", description: "Complete meeting summary with formatting")
-                    ShareOptionRow(icon: "text.alignleft", title: "Export as Text", description: "Plain text version for easy sharing")
-                    ShareOptionRow(icon: "envelope", title: "Email Summary", description: "Send meeting summary via email")
-                    ShareOptionRow(icon: "link", title: "Copy Link", description: "Share meeting via secure link")
-                }
-                .padding()
-                
-                Spacer()
+        VStack(spacing: 20) {
+            Text("Share Meeting")
+                .font(.title)
+                .fontWeight(.bold)
+            
+            VStack(spacing: 16) {
+                ShareOptionRow(icon: "doc.text", title: "Export as PDF", description: "Complete meeting summary with formatting")
+                ShareOptionRow(icon: "text.alignleft", title: "Export as Text", description: "Plain text version for easy sharing")
+                ShareOptionRow(icon: "envelope", title: "Email Summary", description: "Send meeting summary via email")
+                ShareOptionRow(icon: "link", title: "Copy Link", description: "Share meeting via secure link")
             }
-            .navigationTitle("Share")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+            .padding()
+            
+            Spacer()
+        }
+        .navigationTitle("Share")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Done") {
+                    dismiss()
                 }
             }
         }

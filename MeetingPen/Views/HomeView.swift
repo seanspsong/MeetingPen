@@ -12,7 +12,7 @@ struct HomeView: View {
     }
     
     var body: some View {
-        NavigationView {
+        ZStack {
             VStack(spacing: 0) {
                 // Header
                 headerView
@@ -26,15 +26,15 @@ struct HomeView: View {
                 // Quick Action Button
                 quickActionButton
             }
-            .navigationTitle("MeetingPen")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingNewMeeting = true }) {
-                        Image(systemName: "plus")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                    }
+        }
+        .navigationTitle("MeetingPen")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showingNewMeeting = true }) {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundColor(.blue)
                 }
             }
         }
