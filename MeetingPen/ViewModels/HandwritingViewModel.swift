@@ -225,46 +225,20 @@ class HandwritingViewModel: ObservableObject {
         print("🖊️ [DEBUG] =====================================\n")
     }
     
-    /// Append new recognized text to existing text
+    /// Set recognized text (each recognition is treated as a separate segment)
     private func appendRecognizedText(_ newText: String) {
         guard !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
         let cleanNewText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanExistingText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        print("🖊️ [DEBUG] === APPENDING RECOGNIZED TEXT ===")
+        print("🖊️ [DEBUG] === SETTING RECOGNIZED TEXT ===")
         print("🖊️ [DEBUG] New text: '\(cleanNewText)'")
-        print("🖊️ [DEBUG] Existing text: '\(cleanExistingText)'")
         
-        if cleanExistingText.isEmpty {
-            recognizedText = cleanNewText
-            print("🖊️ [DEBUG] First text, setting directly: '\(cleanNewText)'")
-        } else {
-            // Calculate similarity to prevent duplicates and near-duplicates
-            let similarity = calculateTextSimilarity(cleanExistingText, cleanNewText)
-            print("🖊️ [DEBUG] Text similarity: \(similarity)")
-            
-            if similarity > 0.8 {
-                // Too similar, don't add
-                print("🖊️ [DEBUG] Skipping similar text (similarity: \(similarity)): '\(cleanNewText)'")
-                return
-            }
-            
-            // If new text contains the existing text, replace it (it's an improvement)
-            if cleanNewText.contains(cleanExistingText) && cleanNewText.count > cleanExistingText.count {
-                recognizedText = cleanNewText
-                print("🖊️ [DEBUG] Replaced with improved text: '\(cleanNewText)'")
-            }
-            // If existing text doesn't contain new text and they're different, append
-            else if !cleanExistingText.contains(cleanNewText) {
-                recognizedText = cleanExistingText + " " + cleanNewText
-                print("🖊️ [DEBUG] Appended new text: '\(cleanNewText)'")
-            } else {
-                print("🖊️ [DEBUG] Text already contained in existing, skipping: '\(cleanNewText)'")
-            }
-        }
-        print("🖊️ [DEBUG] Final recognized text: '\(recognizedText)'")
-        print("🖊️ [DEBUG] =====================================")
+        // Each recognition is treated as a separate line - don't combine
+        // Just set the current recognized text to the new text
+        recognizedText = cleanNewText
+        print("🖊️ [DEBUG] Set recognized text: '\(cleanNewText)'")
+        print("🖊️ [DEBUG] ===================================")
     }
     
     /// Append new text elements to existing elements
@@ -347,10 +321,14 @@ class HandwritingViewModel: ObservableObject {
                 print("🖊️ [DEBUG] Removed shorter segment: '\(removed.recognizedText)'")
             }
             
-            // Add the new segment
+            // Save each recognition as a separate segment - don't try to split
+            // Each recognition call should be treated as a separate line
+            print("🖊️ [DEBUG] Saving recognition as separate segment: '\(recognizedText)'")
+            
             updatedMeeting.handwritingData.textSegments.append(newTextSegment)
-            print("🖊️ [DEBUG] Added new unique text segment: '\(recognizedText)'")
-            print("🖊️ [DEBUG] New segment timestamp: \(Date(timeIntervalSince1970: newTextSegment.timestamp).formatted(date: .omitted, time: .standard))")
+            print("🖊️ [DEBUG] Added new segment: '\(recognizedText)'")
+            
+            print("🖊️ [DEBUG] New segments timestamp: \(Date(timeIntervalSince1970: newTextSegment.timestamp).formatted(date: .omitted, time: .standard))")
         } else {
             print("🖊️ [DEBUG] Skipping duplicate text: '\(recognizedText)'")
         }
@@ -430,6 +408,8 @@ class HandwritingViewModel: ObservableObject {
         }
         print("🖊️ [DEBUG] ============================================\n")
     }
+    
+
     
     /// Group handwriting segments by time proximity to avoid breaking single inputs
     private func groupSegmentsByProximity(_ segments: [HandwritingTextSegment]) -> [[HandwritingTextSegment]] {

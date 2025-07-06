@@ -203,6 +203,7 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
         
         for (index, observation) in observations.enumerated() {
             print("🔍 [DEBUG] Processing observation \(index + 1)")
+            print("🔍 [DEBUG] Observation bounding box: \(observation.boundingBox)")
             
             guard let topCandidate = observation.topCandidates(1).first else { 
                 print("🔍 [DEBUG] No top candidate for observation \(index + 1)")
@@ -211,13 +212,33 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
             
             print("🔍 [DEBUG] Top candidate: '\(topCandidate.string)' (confidence: \(topCandidate.confidence))")
             
+            // CRITICAL DEBUG: Check if this observation contains multiple lines within it
+            let candidateText = topCandidate.string
+            let linesInCandidate = candidateText.components(separatedBy: .newlines)
+            print("🔍 [DEBUG] Candidate contains \(linesInCandidate.count) internal lines")
+            for (lineIndex, line) in linesInCandidate.enumerated() {
+                if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    print("🔍 [DEBUG]   Internal line \(lineIndex + 1): '\(line)'")
+                }
+            }
+            
             // Accept ALL results regardless of confidence for testing
             print("🔍 [DEBUG] Accepting all results (no confidence threshold)")
             recognizedStrings.append(topCandidate.string)
         }
         
+        print("🔍 [DEBUG] ========== VISION RECOGNITION SUMMARY ==========")
+        print("🔍 [DEBUG] Total Vision observations: \(observations.count)")
+        print("🔍 [DEBUG] Individual observations:")
+        for (index, text) in recognizedStrings.enumerated() {
+            print("🔍 [DEBUG]   Observation \(index + 1): '\(text)'")
+        }
+        print("🔍 [DEBUG] =============================================")
+        
+        // Join observations with spaces (this is correct - Vision gives us one or more observations)
         let result = recognizedStrings.joined(separator: " ")
         print("🔍 [DEBUG] Final recognized text: '\(result)'")
+        print("🔍 [DEBUG] Combined \(recognizedStrings.count) observations")
         return result
     }
     
