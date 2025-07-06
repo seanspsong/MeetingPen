@@ -373,11 +373,16 @@ struct MeetingRecordingView: View {
     private var handwritingCanvasView: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
-                // Hand Notes Section (Top 50% of height)
+                // Hand Notes Section (Top 60% of height)
                 handNoteSection
-                    .frame(height: geometry.size.height * 0.5)
+                    .frame(height: geometry.size.height * 0.6)
                 
-                // Canvas with Debug Overlay (Bottom 50% of height)
+                // Divider line to separate sections
+                Divider()
+                    .background(Color.gray.opacity(0.3))
+                    .frame(height: 1)
+                
+                // Canvas with Debug Overlay (Bottom 40% of height)
                 ZStack {
                     // Main Canvas
                     HandwritingCanvasView(
@@ -412,7 +417,7 @@ struct MeetingRecordingView: View {
                         .padding(.trailing, 20)
                     }
                 }
-                .frame(height: geometry.size.height * 0.5)
+                .frame(height: geometry.size.height * 0.4)
             }
         }
     }
@@ -421,7 +426,7 @@ struct MeetingRecordingView: View {
     
     private var handNoteSection: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header - fixed height
             HStack {
                 HStack(spacing: 8) {
                     Image(systemName: "hand.write")
@@ -450,143 +455,138 @@ struct MeetingRecordingView: View {
             .padding(.vertical, 12)
             .background(Color(UIColor.secondarySystemBackground))
             
-            // Hand Notes Content - Expanded to fill available space
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if handwritingViewModel.recognizedText.isEmpty {
+            // Content area - expands to fill remaining space
+            VStack(spacing: 0) {
+                if handwritingViewModel.recognizedText.isEmpty {
+                    Spacer()
+                    
+                    VStack(spacing: 20) {
+                        Image(systemName: "hand.draw")
+                            .font(.system(size: 54))
+                            .foregroundColor(.gray.opacity(0.6))
+                        
                         VStack(spacing: 12) {
-                            Image(systemName: "hand.draw")
-                                .font(.system(size: 36))
-                                .foregroundColor(.gray.opacity(0.6))
-                            
                             Text("Write with Apple Pencil or finger")
-                                .font(.system(size: 20, weight: .medium))
+                                .font(.system(size: 26, weight: .medium))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             
                             Text("Your handwritten notes will appear here")
-                                .font(.system(size: 16))
+                                .font(.system(size: 20))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
+                    }
+                    
+                    Spacer()
+                } else {
+                    ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("RECOGNIZED TEXT")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.secondary)
                             
-                            // Larger text display area
-                            ScrollView {
-                                Text(handwritingViewModel.recognizedText)
-                                    .font(.system(size: 22, weight: .medium))
-                                    .foregroundColor(.primary)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 16)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(12)
-                            }
-                            .frame(minHeight: 120)
+                            Text(handwritingViewModel.recognizedText)
+                                .font(.system(size: 26, weight: .medium))
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 20)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(16)
                             
-                            // Action buttons
-                            HStack(spacing: 12) {
+                            HStack(spacing: 20) {
                                 Button(action: copyRecognizedText) {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: 12) {
                                         Image(systemName: "doc.on.doc")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.system(size: 20, weight: .medium))
                                         Text("Copy")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.system(size: 20, weight: .medium))
                                     }
                                     .foregroundColor(.blue)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 16)
                                     .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(10)
+                                    .cornerRadius(14)
                                 }
                                 
                                 Button(action: saveRecognizedText) {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: 12) {
                                         Image(systemName: "square.and.arrow.down")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.system(size: 20, weight: .medium))
                                         Text("Save")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.system(size: 20, weight: .medium))
                                     }
                                     .foregroundColor(.green)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 16)
                                     .background(Color.green.opacity(0.1))
-                                    .cornerRadius(10)
+                                    .cornerRadius(14)
                                 }
                                 
                                 Spacer()
                             }
                             
-                            // Recognition Stats
                             if !handwritingViewModel.textElements.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 12) {
                                     Text("RECOGNITION STATS")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.secondary)
                                     
-                                    HStack(spacing: 20) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            HStack(spacing: 4) {
+                                    HStack(spacing: 30) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            HStack(spacing: 8) {
                                                 Image(systemName: "doc.text")
-                                                    .font(.system(size: 14))
+                                                    .font(.system(size: 18))
                                                     .foregroundColor(.secondary)
                                                 Text("Elements")
-                                                    .font(.system(size: 14))
+                                                    .font(.system(size: 18))
                                                     .foregroundColor(.secondary)
                                             }
                                             Text("\(handwritingViewModel.textElements.count)")
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(.system(size: 24, weight: .semibold))
                                                 .foregroundColor(.primary)
                                         }
                                         
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            HStack(spacing: 4) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            HStack(spacing: 8) {
                                                 Image(systemName: "checkmark.circle")
-                                                    .font(.system(size: 14))
+                                                    .font(.system(size: 18))
                                                     .foregroundColor(.secondary)
                                                 Text("Confidence")
-                                                    .font(.system(size: 14))
+                                                    .font(.system(size: 18))
                                                     .foregroundColor(.secondary)
                                             }
                                             Text("\(Int(averageConfidence * 100))%")
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(.system(size: 24, weight: .semibold))
                                                 .foregroundColor(.primary)
                                         }
                                         
                                         Spacer()
                                     }
                                     
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "clock")
-                                            .font(.system(size: 12))
+                                            .font(.system(size: 16))
                                             .foregroundColor(.secondary)
                                         Text("Last recognition: \(formattedLastRecognitionTime)")
-                                            .font(.system(size: 12))
+                                            .font(.system(size: 16))
                                             .foregroundColor(.secondary)
                                     }
                                 }
-                                .padding(.top, 8)
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(UIColor.systemBackground))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
     
     // MARK: - Debug Overlay Section (Compact)
