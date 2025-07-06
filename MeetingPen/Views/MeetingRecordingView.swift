@@ -43,6 +43,9 @@ struct MeetingRecordingView: View {
                 
                 // Floating control bar
                 floatingControlBar
+                
+                // Top-right buttons (Save and Cancel)
+                topRightButtons
             }
         }
         .navigationBarHidden(true)
@@ -342,18 +345,12 @@ struct MeetingRecordingView: View {
                     }
                 }
                 
-                // Settings and close
+                // Settings
                 HStack(spacing: 9) {
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gear")
                             .font(.system(size: 24))
                             .foregroundColor(.blue)
-                    }
-                    
-                    Button(action: { isPresented = false }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.secondary)
                     }
                 }
             }
@@ -367,6 +364,48 @@ struct MeetingRecordingView: View {
             )
             .padding(.bottom, 15)
         }
+    }
+    
+    // MARK: - Top Right Buttons
+    
+    private var topRightButtons: some View {
+        VStack {
+            HStack {
+                Spacer()
+                
+                HStack(spacing: 12) {
+                    // Save button
+                    Button(action: saveAndClose) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.green)
+                            .background(
+                                Circle()
+                                    .fill(Color(UIColor.systemBackground))
+                                    .frame(width: 44, height: 44)
+                                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            )
+                    }
+                    
+                    // Cancel button
+                    Button(action: cancelAndClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.red)
+                            .background(
+                                Circle()
+                                    .fill(Color(UIColor.systemBackground))
+                                    .frame(width: 44, height: 44)
+                                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            )
+                    }
+                }
+                .padding(.trailing, 20)
+            }
+            
+            Spacer()
+        }
+        .padding(.top, 20)
     }
     
     // MARK: - Handwriting Canvas View
@@ -787,6 +826,43 @@ struct MeetingRecordingView: View {
     private func selectEraserTool() {
         let eraserTool = handwritingViewModel.createEraserTool()
         handwritingViewModel.setTool(eraserTool)
+    }
+    
+    private func saveAndClose() {
+        // Stop any active recording
+        if audioRecordingService.isRecording {
+            stopRecording()
+        }
+        
+        // Stop any active playback
+        if audioRecordingService.isPlaying {
+            stopPlayback()
+        }
+        
+        // Save handwriting notes
+        handwritingViewModel.saveToMeeting()
+        
+        // Close the view
+        isPresented = false
+        
+        print("✅ Meeting saved and closed")
+    }
+    
+    private func cancelAndClose() {
+        // Stop any active recording without saving
+        if audioRecordingService.isRecording {
+            audioRecordingService.stopRecording()
+        }
+        
+        // Stop any active playback
+        if audioRecordingService.isPlaying {
+            audioRecordingService.stopPlayback()
+        }
+        
+        // Close the view without saving
+        isPresented = false
+        
+        print("❌ Meeting cancelled and closed")
     }
     
     // MARK: - Recognition Actions
