@@ -43,7 +43,7 @@ class HandwritingViewModel: ObservableObject {
         recognitionService.$recognizedText
             .receive(on: DispatchQueue.main)
             .sink { [weak self] text in
-                self?.recognizedText = text
+                self?.appendRecognizedText(text)
             }
             .store(in: &cancellables)
         
@@ -115,7 +115,7 @@ class HandwritingViewModel: ObservableObject {
                 switch result {
                 case .success(let text):
                     print("🖊️ [DEBUG] \(source) recognition SUCCESS: '\(text)'")
-                    self?.recognizedText = text
+                    self?.appendRecognizedText(text)
                     self?.saveRecognizedText(text)
                 case .failure(let error):
                     print("🖊️ [DEBUG] \(source) recognition FAILED: \(error)")
@@ -131,7 +131,8 @@ class HandwritingViewModel: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let elements):
-                    self?.textElements = elements.filter { $0.confidence >= self?.minimumConfidence ?? 0.3 }
+                    let newElements = elements.filter { $0.confidence >= self?.minimumConfidence ?? 0.3 }
+                    self?.appendTextElements(newElements)
                 case .failure(let error):
                     self?.recognitionError = error
                 }
@@ -163,6 +164,50 @@ class HandwritingViewModel: ObservableObject {
         
         // Clear the recognition cache to ensure fresh processing
         recognitionService.clearCache()
+    }
+    
+    /// Clear only the drawing canvas, preserving recognized text
+    func clearCanvas() {
+        print("🖊️ [DEBUG] Clearing canvas only, preserving recognized text")
+        currentDrawing = PKDrawing()
+        recognitionError = nil
+        
+        // Clear the recognition cache to ensure fresh processing
+        recognitionService.clearCache()
+    }
+    
+    /// Append new recognized text to existing text
+    private func appendRecognizedText(_ newText: String) {
+        guard !newText.isEmpty else { return }
+        
+        if recognizedText.isEmpty {
+            recognizedText = newText
+        } else {
+            // Check if this text is already included to avoid duplicates
+            if !recognizedText.contains(newText) {
+                recognizedText += " " + newText
+            }
+        }
+        print("🖊️ [DEBUG] Appended text. Total recognized text: '\(recognizedText)'")
+    }
+    
+    /// Append new text elements to existing elements
+    private func appendTextElements(_ newElements: [TextElement]) {
+        guard !newElements.isEmpty else { return }
+        
+        for newElement in newElements {
+            // Check if this element is already in our list to avoid duplicates
+            let isDuplicate = textElements.contains { existing in
+                existing.text == newElement.text && 
+                abs(existing.boundingBox.origin.x - newElement.boundingBox.origin.x) < 10 &&
+                abs(existing.boundingBox.origin.y - newElement.boundingBox.origin.y) < 10
+            }
+            
+            if !isDuplicate {
+                textElements.append(newElement)
+            }
+        }
+        print("🖊️ [DEBUG] Appended text elements. Total elements: \(textElements.count)")
     }
     
     /// Save the current drawing and recognized text to the meeting
@@ -272,6 +317,9 @@ class HandwritingViewModel: ObservableObject {
         if !textElements.contains(where: { $0.boundingBox == region }) {
             textElements.append(textElement)
         }
+        
+        // Also append to the main recognized text
+        appendRecognizedText(text)
     }
     
     private func saveRecognizedText(_ text: String) {

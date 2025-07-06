@@ -329,10 +329,10 @@ struct MeetingRecordingView: View {
                             .foregroundColor(.orange)
                     }
                     
-                    Button(action: { handwritingViewModel.clearDrawing() }) {
-                        Image(systemName: "trash")
+                    Button(action: { handwritingViewModel.clearCanvas() }) {
+                        Image(systemName: "clear")
                             .font(.system(size: 24))
-                            .foregroundColor(.red)
+                            .foregroundColor(.orange)
                     }
                     
                     Button(action: { handwritingViewModel.recognizeCurrentDrawing() }) {
@@ -628,14 +628,14 @@ struct MeetingRecordingView: View {
                 }
                 
                 Button(action: {
-                    print("📝 [DEBUG] Clear button pressed")
-                    handwritingViewModel.clearDrawing()
+                    print("📝 [DEBUG] Clear canvas button pressed")
+                    handwritingViewModel.clearCanvas()
                 }) {
-                    Image(systemName: "trash")
+                    Image(systemName: "clear")
                         .font(.system(size: 10))
-                        .foregroundColor(.red)
+                        .foregroundColor(.orange)
                         .frame(width: 20, height: 20)
-                        .background(Color.red.opacity(0.1))
+                        .background(Color.orange.opacity(0.1))
                         .cornerRadius(4)
                 }
                 
