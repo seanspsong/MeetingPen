@@ -7,14 +7,17 @@ struct MeetingCreationView: View {
     @State private var title = ""
     @State private var participants: [String] = []
     @State private var newParticipant = ""
-    @State private var showingStartRecording = false
-    @State private var createdMeeting: Meeting?
+
     
     // Optional binding for when used as a sheet
     var isPresented: Binding<Bool>?
     
-    init(isPresented: Binding<Bool>? = nil) {
+    // Callback for when a meeting should be started with recording
+    var onMeetingCreatedWithRecording: ((Meeting) -> Void)?
+    
+    init(isPresented: Binding<Bool>? = nil, onMeetingCreatedWithRecording: ((Meeting) -> Void)? = nil) {
         self.isPresented = isPresented
+        self.onMeetingCreatedWithRecording = onMeetingCreatedWithRecording
     }
     
     var body: some View {
@@ -133,9 +136,10 @@ struct MeetingCreationView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showingStartRecording) {
-            if let meeting = createdMeeting {
-                MeetingRecordingView(meeting: meeting, isPresented: $showingStartRecording, shouldStartRecording: true)
+        .onAppear {
+            // Set default title with current timestamp if title is empty
+            if title.isEmpty {
+                title = generateTimestampTitle()
             }
         }
     }
@@ -167,6 +171,12 @@ struct MeetingCreationView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func generateTimestampTitle() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HH'h'mm'm'ss's'"
+        return formatter.string(from: Date())
+    }
     
     private func templateButtonView(_ title: String, _ icon: String) -> some View {
         VStack(spacing: 4) {
@@ -224,8 +234,11 @@ struct MeetingCreationView: View {
         meetingStore.createMeeting(title: trimmedTitle, participants: participants)
         
         if let newMeeting = meetingStore.currentMeeting {
-            createdMeeting = newMeeting
-            showingStartRecording = true
+            // Dismiss the creation view first
+            dismissView()
+            
+            // Then trigger the recording via callback
+            onMeetingCreatedWithRecording?(newMeeting)
         }
     }
 }

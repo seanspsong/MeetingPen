@@ -6,6 +6,8 @@ struct HomeView: View {
     @State private var showingMeetingDetail = false
     @State private var selectedMeeting: Meeting?
     @State private var showingNewMeeting = false
+    @State private var showingRecording = false
+    @State private var meetingToRecord: Meeting?
     
     var filteredMeetings: [Meeting] {
         meetingStore.searchMeetings(query: searchText)
@@ -39,7 +41,18 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented: $showingNewMeeting) {
-            MeetingCreationView(isPresented: $showingNewMeeting)
+            MeetingCreationView(
+                isPresented: $showingNewMeeting,
+                onMeetingCreatedWithRecording: { meeting in
+                    meetingToRecord = meeting
+                    showingRecording = true
+                }
+            )
+        }
+        .fullScreenCover(isPresented: $showingRecording) {
+            if let meeting = meetingToRecord {
+                MeetingRecordingView(meeting: meeting, isPresented: $showingRecording, shouldStartRecording: true)
+            }
         }
         .sheet(item: $selectedMeeting) { meeting in
             MeetingDetailView(meeting: meeting)
