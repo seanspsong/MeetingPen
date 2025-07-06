@@ -135,7 +135,7 @@ struct MeetingCreationView: View {
         }
         .fullScreenCover(isPresented: $showingStartRecording) {
             if let meeting = createdMeeting {
-                MeetingRecordingView(meeting: meeting, isPresented: $showingStartRecording)
+                MeetingRecordingView(meeting: meeting, isPresented: $showingStartRecording, shouldStartRecording: true)
             }
         }
     }

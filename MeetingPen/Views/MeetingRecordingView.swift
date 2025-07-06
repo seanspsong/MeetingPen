@@ -8,14 +8,15 @@ struct MeetingRecordingView: View {
     // MARK: - Properties
     let meeting: Meeting
     @Binding var isPresented: Bool
+    let shouldStartRecording: Bool // New parameter to control auto-start
     
     // MARK: - Environment
     @EnvironmentObject var meetingStore: MeetingStore
     
     // MARK: - State
     @StateObject private var handwritingViewModel = HandwritingViewModel()
-    @State private var isRecording = false
-    @State private var recordingDuration: TimeInterval = 0
+    @StateObject private var audioRecordingService = AudioRecordingService.shared
+    @StateObject private var speechRecognitionService = SpeechRecognitionService.shared
     @State private var showingToolPicker = false
     @State private var showingSettings = false
     
@@ -23,8 +24,14 @@ struct MeetingRecordingView: View {
         meeting.title
     }
     
-    // MARK: - Timer
-    @State private var recordingTimer: Timer?
+
+    
+    // MARK: - Initializer
+    init(meeting: Meeting, isPresented: Binding<Bool>, shouldStartRecording: Bool = false) {
+        self.meeting = meeting
+        self._isPresented = isPresented
+        self.shouldStartRecording = shouldStartRecording
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -48,6 +55,13 @@ struct MeetingRecordingView: View {
             // Setup handwriting recognition for current meeting
             handwritingViewModel.meetingStore = meetingStore
             handwritingViewModel.loadFromMeeting(meetingId: meeting.id)
+            
+            // Auto-start recording if requested
+            if shouldStartRecording {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    startRecording()
+                }
+            }
         }
         .sheet(isPresented: $showingSettings) {
             HandwritingSettingsView(viewModel: handwritingViewModel)
@@ -64,33 +78,61 @@ struct MeetingRecordingView: View {
                     .foregroundColor(.primary)
                 
                 HStack {
-                    Image(systemName: isRecording ? "record.circle.fill" : "record.circle")
-                        .foregroundColor(isRecording ? .red : .gray)
-                    
-                    Text(formattedDuration)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
+                    // Recording indicator
+                    if audioRecordingService.isRecording {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundColor(.red)
+                        Text("Recording: \(formattedRecordingDuration)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .monospacedDigit()
+                    }
+                    // Playback indicator
+                    else if audioRecordingService.isPlaying {
+                        Image(systemName: "play.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Playing: \(formattedPlaybackDuration)")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .monospacedDigit()
+                    }
+                    // Idle state
+                    else {
+                        Image(systemName: "circle")
+                            .foregroundColor(.gray)
+                        Text(formattedRecordingDuration)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
                 }
             }
             
             Spacer()
             
-            // Recording controls
-            HStack(spacing: 16) {
+            // Main controls (left: record, right: play)
+            HStack(spacing: 32) {
+                // Left button - Recording (red)
                 Button(action: toggleRecording) {
-                    Image(systemName: isRecording ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(isRecording ? .orange : .green)
+                    Image(systemName: audioRecordingService.isRecording ? "stop.circle.fill" : "record.circle.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(audioRecordingService.isRecording ? .red : .red)
                 }
+                .disabled(audioRecordingService.isPlaying) // Cannot record while playing
                 
-                Button(action: stopRecording) {
-                    Image(systemName: "stop.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.red)
+                // Right button - Playback (green)
+                Button(action: togglePlayback) {
+                    Image(systemName: audioRecordingService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(audioRecordingService.isPlaying ? .green : .green)
                 }
-                .disabled(!isRecording && recordingDuration == 0)
-                
+                .disabled(audioRecordingService.isRecording || !hasRecordedAudio) // Cannot play while recording or if no audio
+            }
+            
+            Spacer()
+            
+            // Secondary controls
+            HStack(spacing: 16) {
                 Button(action: { showingSettings = true }) {
                     Image(systemName: "gear")
                         .font(.title2)
@@ -144,21 +186,40 @@ struct MeetingRecordingView: View {
     private var audioVisualizationView: some View {
         VStack(spacing: 12) {
             // Audio waveform visualization
-            WaveformVisualizationView(isRecording: isRecording)
-                .frame(height: 60)
-                .padding(.horizontal)
+            WaveformVisualizationView(
+                isRecording: audioRecordingService.isRecording,
+                audioLevels: audioRecordingService.audioLevels
+            )
+            .frame(height: 60)
+            .padding(.horizontal)
             
             // Live transcription preview
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Live Transcription")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    HStack {
+                        Text("Live Transcription")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        if speechRecognitionService.isTranscribing {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        }
+                    }
                     
-                    Text("So for the Q4 campaign, I think we should focus on digital marketing initiatives...")
-                        .font(.body)
-                        .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if speechRecognitionService.transcribedText.isEmpty {
+                        Text("Transcription will appear here when recording starts...")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .italic()
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(speechRecognitionService.transcribedText)
+                            .font(.body)
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -519,52 +580,89 @@ struct MeetingRecordingView: View {
         .shadow(radius: 1)
     }
     
-    // MARK: - Helper Views
+    // MARK: - Helper Views and Computed Properties
     
-    private var formattedDuration: String {
-        let minutes = Int(recordingDuration) / 60
-        let seconds = Int(recordingDuration) % 60
+    private var formattedRecordingDuration: String {
+        let minutes = Int(audioRecordingService.recordingDuration) / 60
+        let seconds = Int(audioRecordingService.recordingDuration) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    private var formattedPlaybackDuration: String {
+        let currentMinutes = Int(audioRecordingService.playbackDuration) / 60
+        let currentSeconds = Int(audioRecordingService.playbackDuration) % 60
+        let totalMinutes = Int(audioRecordingService.totalDuration) / 60
+        let totalSeconds = Int(audioRecordingService.totalDuration) % 60
+        return String(format: "%02d:%02d / %02d:%02d", currentMinutes, currentSeconds, totalMinutes, totalSeconds)
+    }
+    
+    private var hasRecordedAudio: Bool {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let audioURL = documentsPath.appendingPathComponent("meeting_\(meeting.id.uuidString).m4a")
+        return FileManager.default.fileExists(atPath: audioURL.path)
     }
     
     // MARK: - Actions
     
     private func toggleRecording() {
-        if isRecording {
-            pauseRecording()
+        if audioRecordingService.isRecording {
+            stopRecording()
         } else {
             startRecording()
         }
     }
     
-    private func startRecording() {
-        isRecording = true
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            recordingDuration += 1
+    private func togglePlayback() {
+        if audioRecordingService.isPlaying {
+            stopPlayback()
+        } else {
+            startPlayback()
         }
-        
-        // Start audio recording here
-        // AudioRecordingService.shared.startRecording()
     }
     
-    private func pauseRecording() {
-        isRecording = false
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        
-        // Pause audio recording here
-        // AudioRecordingService.shared.pauseRecording()
+    private func startRecording() {
+        // Start audio recording
+        let success = audioRecordingService.startRecording(for: meeting.id)
+        if success {
+            // Start live transcription with a slight delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.speechRecognitionService.startTranscribing()
+            }
+            print("🎤 Started recording and transcription for meeting: \(meeting.title)")
+        } else {
+            print("❌ Failed to start recording")
+        }
+    }
+    
+    private func startPlayback() {
+        // Start audio playback
+        let success = audioRecordingService.startPlayback(for: meeting.id)
+        if success {
+            print("▶️ Started playback for meeting: \(meeting.title)")
+        } else {
+            print("❌ Failed to start playback")
+        }
     }
     
     private func stopRecording() {
-        isRecording = false
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        recordingDuration = 0
+        // Stop audio recording
+        let recordingURL = audioRecordingService.stopRecording()
         
-        // Stop audio recording and save meeting
-        // AudioRecordingService.shared.stopRecording()
+        // Stop transcription and save to meeting
+        speechRecognitionService.stopTranscribing()
+        speechRecognitionService.saveTranscription(to: meetingStore, meetingId: meeting.id)
+        
+        // Save handwriting notes
         handwritingViewModel.saveToMeeting()
+        
+        print("⏹️ Stopped recording. File: \(recordingURL?.lastPathComponent ?? "none")")
+    }
+    
+    private func stopPlayback() {
+        // Stop audio playback
+        audioRecordingService.stopPlayback()
+        
+        print("⏹️ Stopped playback")
     }
     
     private func selectPenTool() {
@@ -606,6 +704,7 @@ struct MeetingRecordingView: View {
 
 struct WaveformVisualizationView: View {
     let isRecording: Bool
+    let audioLevels: [Float]
     @State private var animationPhase: CGFloat = 0
     
     var body: some View {
@@ -614,12 +713,10 @@ struct WaveformVisualizationView: View {
                 RoundedRectangle(cornerRadius: 1)
                     .fill(isRecording ? Color.blue : Color.gray.opacity(0.3))
                     .frame(width: 3)
-                    .frame(height: CGFloat.random(in: 4...40))
+                    .frame(height: getBarHeight(for: index))
                     .animation(
-                        .easeInOut(duration: 0.5)
-                        .repeatForever()
-                        .delay(Double(index) * 0.02),
-                        value: animationPhase
+                        .easeInOut(duration: 0.1),
+                        value: audioLevels
                     )
             }
         }
@@ -628,9 +725,25 @@ struct WaveformVisualizationView: View {
                 animationPhase = 1
             }
         }
-        .onChange(of: isRecording) { newValue in
+        .onChange(of: isRecording) { _, newValue in
             animationPhase = newValue ? 1 : 0
         }
+    }
+    
+    private func getBarHeight(for index: Int) -> CGFloat {
+        if !isRecording {
+            return 4.0
+        }
+        
+        // Use real audio levels if available
+        if !audioLevels.isEmpty {
+            let levelIndex = min(index, audioLevels.count - 1)
+            let level = audioLevels[levelIndex]
+            return CGFloat(level) * 40.0 + 4.0 // Scale to 4-44 range
+        }
+        
+        // Fallback to random animation for visual feedback
+        return CGFloat.random(in: 4...40)
     }
 }
 
@@ -711,5 +824,5 @@ struct HandwritingSettingsView: View {
 
 #Preview {
     @State var isPresented = true
-    return MeetingRecordingView(meeting: Meeting.sampleMeetings[0], isPresented: $isPresented)
+    return MeetingRecordingView(meeting: Meeting.sampleMeetings[0], isPresented: $isPresented, shouldStartRecording: false)
 } 
