@@ -11,6 +11,7 @@ class AudioRecordingService: NSObject, ObservableObject {
     @Published var playbackDuration: TimeInterval = 0
     @Published var totalDuration: TimeInterval = 0
     @Published var audioLevels: [Float] = []
+    @Published var microphonePermissionGranted = false
     
     private var audioRecorder: AVAudioRecorder?
     private var audioPlayer: AVAudioPlayer?
@@ -19,53 +20,74 @@ class AudioRecordingService: NSObject, ObservableObject {
     private var playbackTimer: Timer?
     private var recordingURL: URL?
     private var currentMeetingId: UUID?
+    private var audioSessionSetup = false
     
     override init() {
         super.init()
-        // Don't setup audio session immediately to avoid crashes
-        // It will be set up when recording starts
+        // Setup audio session and request permissions early
+        setupAudioSession()
     }
     
     private func setupAudioSession() {
+        guard !audioSessionSetup else { return }
+        
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try audioSession.setActive(true)
+            audioSessionSetup = true
+            print("🎤 Audio session setup completed")
             
-            // Request microphone permission
-            if #available(iOS 17.0, *) {
-                Task {
-                    do {
-                        let granted = try await AVAudioApplication.requestRecordPermission()
-                        DispatchQueue.main.async {
-                            print("🎤 Microphone permission: \(granted ? "Granted" : "Denied")")
-                        }
-                    } catch {
-                        print("❌ Failed to request microphone permission: \(error)")
-                    }
-                }
-            } else {
-                audioSession.requestRecordPermission { granted in
-                    DispatchQueue.main.async {
-                        print("🎤 Microphone permission: \(granted ? "Granted" : "Denied")")
-                    }
-                }
-            }
+            // Request microphone permission early
+            requestMicrophonePermission()
         } catch {
             print("❌ Failed to setup audio session: \(error)")
+        }
+    }
+    
+    private func requestMicrophonePermission() {
+        if #available(iOS 17.0, *) {
+            Task {
+                do {
+                    let granted = try await AVAudioApplication.requestRecordPermission()
+                    DispatchQueue.main.async {
+                        self.microphonePermissionGranted = granted
+                        print("🎤 Microphone permission: \(granted ? "Granted" : "Denied")")
+                    }
+                } catch {
+                    print("❌ Failed to request microphone permission: \(error)")
+                }
+            }
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    self.microphonePermissionGranted = granted
+                    print("🎤 Microphone permission: \(granted ? "Granted" : "Denied")")
+                }
+            }
         }
     }
     
     func startRecording(for meetingId: UUID) -> Bool {
         guard !isRecording && !isPlaying else { return false }
         
+        // Ensure audio session is setup
+        if !audioSessionSetup {
+            setupAudioSession()
+        }
+        
+        // Check microphone permission
+        guard microphonePermissionGranted else {
+            print("❌ Microphone permission not granted")
+            // Request permission again and retry
+            requestMicrophonePermission()
+            return false
+        }
+        
         // Stop playback if active
         if isPlaying {
             stopPlayback()
         }
-        
-        // Set up audio session before recording
-        setupAudioSession()
         
         // Create recording URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

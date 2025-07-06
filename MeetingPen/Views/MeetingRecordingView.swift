@@ -52,8 +52,9 @@ struct MeetingRecordingView: View {
             
             // Auto-start recording if requested
             if shouldStartRecording {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    startRecording()
+                // Use longer delay to ensure services are initialized
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    self.startRecordingWithRetry()
                 }
             }
         }
@@ -370,44 +371,48 @@ struct MeetingRecordingView: View {
     // MARK: - Handwriting Canvas View
     
     private var handwritingCanvasView: some View {
-        VStack(spacing: 0) {
-            // Hand Note Section (Always Visible)
-            handNoteSection
-            
-            // Canvas with Debug Overlay
-            ZStack {
-                // Main Canvas
-                HandwritingCanvasView(
-                    drawing: $handwritingViewModel.currentDrawing,
-                    recognizedText: $handwritingViewModel.recognizedText,
-                    isRecognizing: $handwritingViewModel.isRecognizing,
-                    allowsFingerDrawing: handwritingViewModel.allowsFingerDrawing,
-                    showRecognitionPreview: handwritingViewModel.showRecognitionPreview,
-                    recognitionDelay: handwritingViewModel.recognitionDelay,
-                    onDrawingChange: { drawing in
-                        print("📝 [DEBUG] MeetingRecordingView.onDrawingChange called with \(drawing.strokes.count) strokes")
-                        // Update the view model with the new drawing
-                        handwritingViewModel.currentDrawing = drawing
-                    },
-                    onRecognitionTrigger: { drawing in
-                        print("📝 [DEBUG] MeetingRecordingView.onRecognitionTrigger called with \(drawing.strokes.count) strokes")
-                        // Trigger automatic recognition through the view model (uses cache)
-                        handwritingViewModel.performAutoRecognition()
-                    }
-                )
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Hand Notes Section (Top 50% of height)
+                handNoteSection
+                    .frame(height: geometry.size.height * 0.5)
                 
-                // Debug View Overlay (Bottom Right)
-                if showDebugView {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            debugOverlaySection
+                // Canvas with Debug Overlay (Bottom 50% of height)
+                ZStack {
+                    // Main Canvas
+                    HandwritingCanvasView(
+                        drawing: $handwritingViewModel.currentDrawing,
+                        recognizedText: $handwritingViewModel.recognizedText,
+                        isRecognizing: $handwritingViewModel.isRecognizing,
+                        allowsFingerDrawing: handwritingViewModel.allowsFingerDrawing,
+                        showRecognitionPreview: handwritingViewModel.showRecognitionPreview,
+                        recognitionDelay: handwritingViewModel.recognitionDelay,
+                        onDrawingChange: { drawing in
+                            print("📝 [DEBUG] MeetingRecordingView.onDrawingChange called with \(drawing.strokes.count) strokes")
+                            // Update the view model with the new drawing
+                            handwritingViewModel.currentDrawing = drawing
+                        },
+                        onRecognitionTrigger: { drawing in
+                            print("📝 [DEBUG] MeetingRecordingView.onRecognitionTrigger called with \(drawing.strokes.count) strokes")
+                            // Trigger automatic recognition through the view model (uses cache)
+                            handwritingViewModel.performAutoRecognition()
                         }
+                    )
+                    
+                    // Debug View Overlay (Bottom Right)
+                    if showDebugView {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                debugOverlaySection
+                            }
+                        }
+                        .padding(.bottom, 20)
+                        .padding(.trailing, 20)
                     }
-                    .padding(.bottom, 20)
-                    .padding(.trailing, 20)
                 }
+                .frame(height: geometry.size.height * 0.5)
             }
         }
     }
@@ -445,103 +450,136 @@ struct MeetingRecordingView: View {
             .padding(.vertical, 12)
             .background(Color(UIColor.secondarySystemBackground))
             
-            // Hand Notes Content
-            VStack(alignment: .leading, spacing: 12) {
-                if handwritingViewModel.recognizedText.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "hand.draw")
-                            .font(.system(size: 24))
-                            .foregroundColor(.gray.opacity(0.6))
-                        
-                        Text("Write with Apple Pencil or finger")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Your handwritten notes will appear here")
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                } else {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 8) {
+            // Hand Notes Content - Expanded to fill available space
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if handwritingViewModel.recognizedText.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "hand.draw")
+                                .font(.system(size: 36))
+                                .foregroundColor(.gray.opacity(0.6))
+                            
+                            Text("Write with Apple Pencil or finger")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            
+                            Text("Your handwritten notes will appear here")
+                                .font(.system(size: 16))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
                             Text("RECOGNIZED TEXT")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
                             
-                            Text(handwritingViewModel.recognizedText)
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        
-                        VStack(spacing: 8) {
-                            Button(action: copyRecognizedText) {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.blue)
-                                    .frame(width: 32, height: 32)
+                            // Larger text display area
+                            ScrollView {
+                                Text(handwritingViewModel.recognizedText)
+                                    .font(.system(size: 22, weight: .medium))
+                                    .foregroundColor(.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 16)
                                     .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(8)
+                                    .cornerRadius(12)
                             }
+                            .frame(minHeight: 120)
                             
-                            Button(action: saveRecognizedText) {
-                                Image(systemName: "square.and.arrow.down")
-                                    .font(.system(size: 14, weight: .medium))
+                            // Action buttons
+                            HStack(spacing: 12) {
+                                Button(action: copyRecognizedText) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 16, weight: .medium))
+                                        Text("Copy")
+                                            .font(.system(size: 16, weight: .medium))
+                                    }
+                                    .foregroundColor(.blue)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(10)
+                                }
+                                
+                                Button(action: saveRecognizedText) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.system(size: 16, weight: .medium))
+                                        Text("Save")
+                                            .font(.system(size: 16, weight: .medium))
+                                    }
                                     .foregroundColor(.green)
-                                    .frame(width: 32, height: 32)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
                                     .background(Color.green.opacity(0.1))
-                                    .cornerRadius(8)
+                                    .cornerRadius(10)
+                                }
+                                
+                                Spacer()
+                            }
+                            
+                            // Recognition Stats
+                            if !handwritingViewModel.textElements.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("RECOGNITION STATS")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                    
+                                    HStack(spacing: 20) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "doc.text")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.secondary)
+                                                Text("Elements")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Text("\(handwritingViewModel.textElements.count)")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.primary)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "checkmark.circle")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.secondary)
+                                                Text("Confidence")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Text("\(Int(averageConfidence * 100))%")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.primary)
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                    
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "clock")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.secondary)
+                                        Text("Last recognition: \(formattedLastRecognitionTime)")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(.top, 8)
                             }
                         }
-                    }
-                    
-                    // Recognition Stats
-                    if !handwritingViewModel.textElements.isEmpty {
-                        HStack(spacing: 16) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                                Text("\(handwritingViewModel.textElements.count) elements")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "checkmark.circle")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                                Text("\(Int(averageConfidence * 100))% confidence")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                                Text("Last: \(formattedLastRecognitionTime)")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        .padding(.top, 8)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
             .background(Color(UIColor.systemBackground))
         }
         .background(Color(UIColor.systemBackground))
@@ -669,7 +707,7 @@ struct MeetingRecordingView: View {
         if audioRecordingService.isRecording {
             stopRecording()
         } else {
-            startRecording()
+            _ = startRecording()
         }
     }
     
@@ -681,17 +719,32 @@ struct MeetingRecordingView: View {
         }
     }
     
-    private func startRecording() {
+    private func startRecordingWithRetry() {
+        // Try to start recording with retry logic for first-run permission issues
+        let success = startRecording()
+        
+        if !success {
+            // If failed, wait a bit and try again (permissions might have been granted)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                print("🔄 Retrying recording start...")
+                _ = self.startRecording()
+            }
+        }
+    }
+    
+    private func startRecording() -> Bool {
         // Start audio recording
         let success = audioRecordingService.startRecording(for: meeting.id)
         if success {
-            // Start live transcription with a slight delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Start live transcription with a longer delay to ensure recording is stable
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.speechRecognitionService.startTranscribing()
             }
             print("🎤 Started recording and transcription for meeting: \(meeting.title)")
+            return true
         } else {
             print("❌ Failed to start recording")
+            return false
         }
     }
     

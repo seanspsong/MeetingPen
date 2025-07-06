@@ -18,8 +18,8 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     override init() {
         super.init()
         speechRecognizer?.delegate = self
-        // Don't request authorization immediately to avoid crashes
-        // It will be requested when transcription starts
+        // Request authorization early to avoid first-run failures
+        requestAuthorization()
     }
     
     private func requestAuthorization() {
@@ -32,13 +32,12 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     }
     
     func startTranscribing() {
-        // Request authorization if needed
-        if authorizationStatus == .notDetermined {
-            requestAuthorization()
-        }
-        
+        // Check authorization status first
         guard authorizationStatus == .authorized else {
-            print("❌ Speech recognition not authorized")
+            print("❌ Speech recognition not authorized: \(authorizationStatus.rawValue)")
+            if authorizationStatus == .notDetermined {
+                requestAuthorization()
+            }
             return
         }
         
@@ -50,6 +49,13 @@ class SpeechRecognitionService: NSObject, ObservableObject {
         // Stop any existing task
         stopTranscribing()
         
+        // Add a small delay to ensure audio session is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.performTranscription()
+        }
+    }
+    
+    private func performTranscription() {
         // Configure audio session for recording (compatible with existing recording)
         let audioSession = AVAudioSession.sharedInstance()
         do {
@@ -83,7 +89,7 @@ class SpeechRecognitionService: NSObject, ObservableObject {
             try audioEngine.start()
             
             // Start recognition task
-            recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                 DispatchQueue.main.async {
                     if let result = result {
                         self?.transcribedText = result.bestTranscription.formattedString
@@ -92,6 +98,9 @@ class SpeechRecognitionService: NSObject, ObservableObject {
                     
                     if error != nil || result?.isFinal == true {
                         print("🎙️ Recognition task completed")
+                        if error != nil {
+                            print("❌ Recognition error: \(error!.localizedDescription)")
+                        }
                         self?.stopTranscribing()
                     }
                 }
