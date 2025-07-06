@@ -301,7 +301,40 @@ struct MeetingHandwritingData: Codable {
     }
     
     var allRecognizedText: String {
-        textSegments.map { $0.recognizedText }.joined(separator: "\n")
+        // Sort segments by timestamp and group by time proximity 
+        let sortedSegments = textSegments.sorted { $0.timestamp < $1.timestamp }
+        var groups: [[HandwritingTextSegment]] = []
+        var currentGroup: [HandwritingTextSegment] = []
+        
+        let proximityThreshold: TimeInterval = 10.0 // 10 seconds - same as debug grouping
+        
+        for segment in sortedSegments {
+            if currentGroup.isEmpty {
+                currentGroup = [segment]
+            } else {
+                let lastTimestamp = currentGroup.last?.timestamp ?? 0
+                let timeDifference = segment.timestamp - lastTimestamp
+                
+                if timeDifference <= proximityThreshold {
+                    // Same input session - combine with space
+                    currentGroup.append(segment)
+                } else {
+                    // Different input session - start new group
+                    groups.append(currentGroup)
+                    currentGroup = [segment]
+                }
+            }
+        }
+        
+        // Add the last group
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+        
+        // Join groups with line breaks, segments within groups with spaces
+        return groups.map { group in
+            group.map { $0.recognizedText }.joined(separator: " ")
+        }.joined(separator: "\n")
     }
     
     func searchHandwriting(_ query: String) -> [HandwritingTextSegment] {

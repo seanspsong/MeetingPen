@@ -1015,6 +1015,15 @@ struct HandwritingSettingsView: View {
                     Button("Recognize Current Drawing") {
                         viewModel.recognizeCurrentDrawing()
                     }
+                    
+                    Button("Clean Up Duplicate Notes") {
+                        viewModel.cleanupAllMeetingDuplicates()
+                    }
+                    .foregroundColor(.orange)
+                }
+                
+                Section(footer: Text("Use 'Clean Up Duplicate Notes' if you see repeated handwriting notes in your meetings.")) {
+                    EmptyView()
                 }
             }
             .navigationTitle("Handwriting Settings")

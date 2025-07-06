@@ -191,19 +191,80 @@ class HandwritingViewModel: ObservableObject {
         recognitionService.clearCache()
     }
     
-    /// Append new recognized text to existing text
-    private func appendRecognizedText(_ newText: String) {
-        guard !newText.isEmpty else { return }
+    /// Clean up duplicates in all meetings (for existing users with duplication issues)
+    func cleanupAllMeetingDuplicates() {
+        guard let meetingStore = meetingStore else { return }
         
-        if recognizedText.isEmpty {
-            recognizedText = newText
-        } else {
-            // Check if this text is already included to avoid duplicates
-            if !recognizedText.contains(newText) {
-                recognizedText += " " + newText
+        print("🧹 [DEBUG] Starting cleanup of all meetings...")
+        var totalCleaned = 0
+        
+        for meeting in meetingStore.meetings {
+            let originalCount = meeting.handwritingData.textSegments.count
+            if originalCount > 0 {
+                cleanupDuplicatesInMeeting(meeting)
+                // Refresh the meeting to get updated count
+                if let updatedMeeting = meetingStore.meetings.first(where: { $0.id == meeting.id }) {
+                    let newCount = updatedMeeting.handwritingData.textSegments.count
+                    if newCount < originalCount {
+                        totalCleaned += (originalCount - newCount)
+                    }
+                }
             }
         }
-        print("🖊️ [DEBUG] Appended text. Total recognized text: '\(recognizedText)'")
+        
+        print("🧹 [DEBUG] Cleanup complete: removed \(totalCleaned) duplicate segments")
+        
+        // Debug: Show summary of all meetings after cleanup
+        print("\n📝 [DEBUG] === ALL MEETINGS AFTER CLEANUP ===")
+        for meeting in meetingStore.meetings {
+            if !meeting.handwritingData.textSegments.isEmpty {
+                print("🖊️ [DEBUG] Meeting: '\(meeting.title)' - \(meeting.handwritingData.textSegments.count) segments")
+                printSavedHandwritingDebug(meeting)
+            }
+        }
+        print("🖊️ [DEBUG] =====================================\n")
+    }
+    
+    /// Append new recognized text to existing text
+    private func appendRecognizedText(_ newText: String) {
+        guard !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        let cleanNewText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanExistingText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        print("🖊️ [DEBUG] === APPENDING RECOGNIZED TEXT ===")
+        print("🖊️ [DEBUG] New text: '\(cleanNewText)'")
+        print("🖊️ [DEBUG] Existing text: '\(cleanExistingText)'")
+        
+        if cleanExistingText.isEmpty {
+            recognizedText = cleanNewText
+            print("🖊️ [DEBUG] First text, setting directly: '\(cleanNewText)'")
+        } else {
+            // Calculate similarity to prevent duplicates and near-duplicates
+            let similarity = calculateTextSimilarity(cleanExistingText, cleanNewText)
+            print("🖊️ [DEBUG] Text similarity: \(similarity)")
+            
+            if similarity > 0.8 {
+                // Too similar, don't add
+                print("🖊️ [DEBUG] Skipping similar text (similarity: \(similarity)): '\(cleanNewText)'")
+                return
+            }
+            
+            // If new text contains the existing text, replace it (it's an improvement)
+            if cleanNewText.contains(cleanExistingText) && cleanNewText.count > cleanExistingText.count {
+                recognizedText = cleanNewText
+                print("🖊️ [DEBUG] Replaced with improved text: '\(cleanNewText)'")
+            }
+            // If existing text doesn't contain new text and they're different, append
+            else if !cleanExistingText.contains(cleanNewText) {
+                recognizedText = cleanExistingText + " " + cleanNewText
+                print("🖊️ [DEBUG] Appended new text: '\(cleanNewText)'")
+            } else {
+                print("🖊️ [DEBUG] Text already contained in existing, skipping: '\(cleanNewText)'")
+            }
+        }
+        print("🖊️ [DEBUG] Final recognized text: '\(recognizedText)'")
+        print("🖊️ [DEBUG] =====================================")
     }
     
     /// Append new text elements to existing elements
@@ -239,36 +300,211 @@ class HandwritingViewModel: ObservableObject {
             return 
         }
         
+        guard !recognizedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("🖊️ [DEBUG] Recognized text is empty, not saving")
+            return
+        }
+        
+        // Debug: Show current saved text in file-like format
+        printSavedHandwritingDebug(meeting)
+        
         print("🖊️ [DEBUG] Found meeting: '\(meeting.title)'")
         print("🖊️ [DEBUG] Current handwritten notes: '\(meeting.handwritingData.allRecognizedText)'")
         
-        // Update the meeting with handwritten notes and drawing data
         var updatedMeeting = meeting
-        updatedMeeting.handwritingData.textSegments.append(
-            HandwritingTextSegment(
-                recognizedText: recognizedText,
-                confidence: 0.85,
-                boundingBox: .zero,
-                timestamp: Date().timeIntervalSince1970,
-                pageIndex: 0
-            )
-        )
         
-        // Also save drawing data to the meeting
-        let drawingData = currentDrawing.dataRepresentation()
-        var drawingObject = HandwritingDrawing(
+        // Check if this text already exists to prevent duplicates
+        let newTextSegment = HandwritingTextSegment(
+            recognizedText: recognizedText,
+            confidence: 0.85,
             boundingBox: .zero,
             timestamp: Date().timeIntervalSince1970,
-            pageIndex: 0,
-            title: "Handwriting \(Date().formatted(date: .omitted, time: .shortened))"
+            pageIndex: 0
         )
-        drawingObject.drawingData = drawingData
-        updatedMeeting.handwritingData.drawings.append(drawingObject)
+        
+        // Check for duplicates and similar text
+        let isDuplicate = updatedMeeting.handwritingData.textSegments.contains { segment in
+            let similarity = calculateTextSimilarity(segment.recognizedText, recognizedText)
+            return similarity > 0.8 // 80% similarity threshold
+        }
+        
+        if !isDuplicate {
+            // Remove any segments that are substrings of the new text (improved versions)
+            let removedSegments = updatedMeeting.handwritingData.textSegments.filter { segment in
+                recognizedText.contains(segment.recognizedText) && 
+                segment.recognizedText.count < recognizedText.count &&
+                segment.recognizedText.count > 5 // Don't remove very short text
+            }
+            
+            updatedMeeting.handwritingData.textSegments.removeAll { segment in
+                recognizedText.contains(segment.recognizedText) && 
+                segment.recognizedText.count < recognizedText.count &&
+                segment.recognizedText.count > 5 // Don't remove very short text
+            }
+            
+            // Debug: Show what segments were removed
+            for removed in removedSegments {
+                print("🖊️ [DEBUG] Removed shorter segment: '\(removed.recognizedText)'")
+            }
+            
+            // Add the new segment
+            updatedMeeting.handwritingData.textSegments.append(newTextSegment)
+            print("🖊️ [DEBUG] Added new unique text segment: '\(recognizedText)'")
+            print("🖊️ [DEBUG] New segment timestamp: \(Date(timeIntervalSince1970: newTextSegment.timestamp).formatted(date: .omitted, time: .standard))")
+        } else {
+            print("🖊️ [DEBUG] Skipping duplicate text: '\(recognizedText)'")
+        }
+        
+        // Also save drawing data to the meeting (with deduplication)
+        let drawingData = currentDrawing.dataRepresentation()
+        let currentTime = Date().timeIntervalSince1970
+        
+        // Only add drawing if it's significantly different from the last one
+        let shouldAddDrawing = updatedMeeting.handwritingData.drawings.isEmpty || {
+            guard let lastDrawing = updatedMeeting.handwritingData.drawings.last else { return true }
+            
+            // Check if enough time has passed (at least 30 seconds)
+            let timeDiff = currentTime - lastDrawing.timestamp
+            if timeDiff < 30 { return false }
+            
+            // Check if drawing has significantly more strokes
+            let lastStrokeCount = (try? PKDrawing(data: lastDrawing.drawingData ?? Data()))?.strokes.count ?? 0
+            let currentStrokeCount = currentDrawing.strokes.count
+            return currentStrokeCount > lastStrokeCount + 3 // At least 3 more strokes
+        }()
+        
+        if shouldAddDrawing {
+            var drawingObject = HandwritingDrawing(
+                boundingBox: .zero,
+                timestamp: currentTime,
+                pageIndex: 0,
+                title: "Handwriting \(Date().formatted(date: .omitted, time: .shortened))"
+            )
+            drawingObject.drawingData = drawingData
+            updatedMeeting.handwritingData.drawings.append(drawingObject)
+            print("🖊️ [DEBUG] Added new drawing data")
+        } else {
+            print("🖊️ [DEBUG] Skipping similar drawing data")
+        }
         
         meetingStore.updateMeeting(updatedMeeting)
         
-        print("✅ [DEBUG] Saved handwriting to meeting: '\(recognizedText)'")
-        print("🖊️ [DEBUG] Updated meeting handwritten notes: '\(updatedMeeting.handwritingData.allRecognizedText)'")
+        print("✅ [DEBUG] Saved handwriting to meeting")
+        print("🖊️ [DEBUG] Total text segments: \(updatedMeeting.handwritingData.textSegments.count)")
+        
+        // Debug: Show updated saved text in file-like format
+        printSavedHandwritingDebug(updatedMeeting)
+    }
+    
+    /// Print saved handwriting text in a file-like format for debugging
+    private func printSavedHandwritingDebug(_ meeting: Meeting) {
+        print("\n📝 [DEBUG] === SAVED HANDWRITING TEXT (File View) ===")
+        print("🖊️ [DEBUG] Meeting: '\(meeting.title)'")
+        print("🖊️ [DEBUG] Total segments: \(meeting.handwritingData.textSegments.count)")
+        print("🖊️ [DEBUG] ============================================")
+        
+        if meeting.handwritingData.textSegments.isEmpty {
+            print("🖊️ [DEBUG] (No handwriting text saved)")
+        } else {
+            // Group segments by time proximity to avoid breaking single inputs
+            let groupedSegments = groupSegmentsByProximity(meeting.handwritingData.textSegments)
+            
+            for (index, group) in groupedSegments.enumerated() {
+                let lineNumber = String(format: "%3d", index + 1)
+                let combinedText = group.map { $0.recognizedText }.joined(separator: " ")
+                let timestamp = Date(timeIntervalSince1970: group.first?.timestamp ?? 0)
+                let timeString = timestamp.formatted(date: .omitted, time: .standard)
+                
+                print("🖊️ [DEBUG] \(lineNumber): [\(timeString)] \(combinedText)")
+            }
+        }
+        
+        print("🖊️ [DEBUG] ============================================")
+        print("🖊️ [DEBUG] Final combined text (line breaks only between separate inputs):")
+        let formattedText = meeting.handwritingData.allRecognizedText
+        let lines = formattedText.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            if !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                print("🖊️ [DEBUG]   Line \(index + 1): \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+        print("🖊️ [DEBUG] ============================================\n")
+    }
+    
+    /// Group handwriting segments by time proximity to avoid breaking single inputs
+    private func groupSegmentsByProximity(_ segments: [HandwritingTextSegment]) -> [[HandwritingTextSegment]] {
+        guard !segments.isEmpty else { return [] }
+        
+        // Sort segments by timestamp
+        let sortedSegments = segments.sorted { $0.timestamp < $1.timestamp }
+        var groups: [[HandwritingTextSegment]] = []
+        var currentGroup: [HandwritingTextSegment] = []
+        
+        let proximityThreshold: TimeInterval = 10.0 // 10 seconds
+        
+        for segment in sortedSegments {
+            if currentGroup.isEmpty {
+                currentGroup = [segment]
+            } else {
+                let lastTimestamp = currentGroup.last?.timestamp ?? 0
+                let timeDifference = segment.timestamp - lastTimestamp
+                
+                if timeDifference <= proximityThreshold {
+                    // Add to current group (same input session)
+                    currentGroup.append(segment)
+                } else {
+                    // Start new group (different input session)
+                    groups.append(currentGroup)
+                    currentGroup = [segment]
+                }
+            }
+        }
+        
+        // Add the last group
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+        
+        return groups
+    }
+    
+    /// Calculate text similarity between two strings (0.0 = no similarity, 1.0 = identical)
+    private func calculateTextSimilarity(_ text1: String, _ text2: String) -> Double {
+        let clean1 = text1.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let clean2 = text2.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        
+        print("🖊️ [DEBUG] Calculating similarity between:")
+        print("🖊️ [DEBUG]   Text 1: '\(clean1)'")
+        print("🖊️ [DEBUG]   Text 2: '\(clean2)'")
+        
+        if clean1 == clean2 { 
+            print("🖊️ [DEBUG]   Result: 1.0 (identical)")
+            return 1.0 
+        }
+        if clean1.isEmpty || clean2.isEmpty { 
+            print("🖊️ [DEBUG]   Result: 0.0 (one is empty)")
+            return 0.0 
+        }
+        
+        // Check if one is a substring of the other
+        if clean1.contains(clean2) || clean2.contains(clean1) {
+            let shorter = min(clean1.count, clean2.count)
+            let longer = max(clean1.count, clean2.count)
+            let result = Double(shorter) / Double(longer)
+            print("🖊️ [DEBUG]   Result: \(result) (substring match: \(shorter)/\(longer))")
+            return result
+        }
+        
+        // Simple word-based similarity
+        let words1 = Set(clean1.components(separatedBy: .whitespacesAndNewlines))
+        let words2 = Set(clean2.components(separatedBy: .whitespacesAndNewlines))
+        
+        let intersection = words1.intersection(words2)
+        let union = words1.union(words2)
+        
+        let result = union.isEmpty ? 0.0 : Double(intersection.count) / Double(union.count)
+        print("🖊️ [DEBUG]   Result: \(result) (word match: \(intersection.count)/\(union.count))")
+        return result
     }
     
     /// Load drawing and recognized text from a meeting
@@ -280,6 +516,9 @@ class HandwritingViewModel: ObservableObject {
             print("Cannot load: missing meetingStore or meeting")
             return 
         }
+        
+        // Clean up duplicates in existing data (auto-repair)
+        cleanupDuplicatesInMeeting(meeting)
         
         // Load handwritten notes
         recognizedText = meeting.handwritingData.allRecognizedText
@@ -294,6 +533,55 @@ class HandwritingViewModel: ObservableObject {
         }
         
         print("📖 Loaded handwriting from meeting: '\(recognizedText)'")
+        
+        // Debug: Show loaded handwriting text in file-like format
+        printSavedHandwritingDebug(meeting)
+    }
+    
+    /// Clean up duplicate text segments in a meeting (auto-repair for existing data)
+    private func cleanupDuplicatesInMeeting(_ meeting: Meeting) {
+        guard let meetingStore = meetingStore else { return }
+        
+        var updatedMeeting = meeting
+        let originalCount = updatedMeeting.handwritingData.textSegments.count
+        
+        // Remove duplicates based on similarity
+        var uniqueSegments: [HandwritingTextSegment] = []
+        
+        for segment in updatedMeeting.handwritingData.textSegments {
+            let isDuplicate = uniqueSegments.contains { existing in
+                let similarity = calculateTextSimilarity(existing.recognizedText, segment.recognizedText)
+                return similarity > 0.8
+            }
+            
+            if !isDuplicate {
+                // Also check if this segment is a substring of any existing segment
+                let isSubstring = uniqueSegments.contains { existing in
+                    existing.recognizedText.contains(segment.recognizedText) && 
+                    existing.recognizedText.count > segment.recognizedText.count
+                }
+                
+                if !isSubstring {
+                    // Remove any existing segments that are substrings of this one
+                    uniqueSegments.removeAll { existing in
+                        segment.recognizedText.contains(existing.recognizedText) &&
+                        segment.recognizedText.count > existing.recognizedText.count &&
+                        existing.recognizedText.count > 5
+                    }
+                    
+                    uniqueSegments.append(segment)
+                }
+            }
+        }
+        
+        if uniqueSegments.count != originalCount {
+            updatedMeeting.handwritingData.textSegments = uniqueSegments
+            meetingStore.updateMeeting(updatedMeeting)
+            print("🧹 [DEBUG] Cleaned up duplicates: \(originalCount) → \(uniqueSegments.count) segments")
+            
+            // Debug: Show cleaned up text in file-like format
+            printSavedHandwritingDebug(updatedMeeting)
+        }
     }
     
     // MARK: - Drawing Tools
