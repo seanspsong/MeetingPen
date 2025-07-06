@@ -234,176 +234,59 @@ struct MeetingRecordingView: View {
     
     private var handwritingCanvasView: some View {
         VStack(spacing: 0) {
-            // Debug Info Section (Conditionally Visible)
-            if showDebugView {
-                debugSection
-            }
+            // Hand Note Section (Always Visible)
+            handNoteSection
             
-            // Handwriting Recognition Section (Always Visible)
-            recognitionResultsSection
-            
-            // Canvas
-            HandwritingCanvasView(
-                drawing: $handwritingViewModel.currentDrawing,
-                recognizedText: $handwritingViewModel.recognizedText,
-                isRecognizing: $handwritingViewModel.isRecognizing,
-                allowsFingerDrawing: handwritingViewModel.allowsFingerDrawing,
-                showRecognitionPreview: handwritingViewModel.showRecognitionPreview,
-                recognitionDelay: handwritingViewModel.recognitionDelay,
-                onDrawingChange: { drawing in
-                    print("📝 [DEBUG] MeetingRecordingView.onDrawingChange called with \(drawing.strokes.count) strokes")
-                    // Update the view model with the new drawing
-                    handwritingViewModel.currentDrawing = drawing
-                },
-                onRecognitionTrigger: { drawing in
-                    print("📝 [DEBUG] MeetingRecordingView.onRecognitionTrigger called with \(drawing.strokes.count) strokes")
-                    // Trigger automatic recognition through the view model (uses cache)
-                    handwritingViewModel.performAutoRecognition()
+            // Canvas with Debug Overlay
+            ZStack {
+                // Main Canvas
+                HandwritingCanvasView(
+                    drawing: $handwritingViewModel.currentDrawing,
+                    recognizedText: $handwritingViewModel.recognizedText,
+                    isRecognizing: $handwritingViewModel.isRecognizing,
+                    allowsFingerDrawing: handwritingViewModel.allowsFingerDrawing,
+                    showRecognitionPreview: handwritingViewModel.showRecognitionPreview,
+                    recognitionDelay: handwritingViewModel.recognitionDelay,
+                    onDrawingChange: { drawing in
+                        print("📝 [DEBUG] MeetingRecordingView.onDrawingChange called with \(drawing.strokes.count) strokes")
+                        // Update the view model with the new drawing
+                        handwritingViewModel.currentDrawing = drawing
+                    },
+                    onRecognitionTrigger: { drawing in
+                        print("📝 [DEBUG] MeetingRecordingView.onRecognitionTrigger called with \(drawing.strokes.count) strokes")
+                        // Trigger automatic recognition through the view model (uses cache)
+                        handwritingViewModel.performAutoRecognition()
+                    }
+                )
+                
+                // Debug View Overlay (Bottom Left)
+                if showDebugView {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            debugOverlaySection
+                            Spacer()
+                        }
+                    }
+                    .padding(.bottom, 20)
+                    .padding(.leading, 20)
                 }
-            )
+            }
         }
     }
     
-    // MARK: - Debug Section (Conditionally Visible)
+    // MARK: - Hand Note Section
     
-    private var debugSection: some View {
-        VStack(spacing: 0) {
-            // Debug Info Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("🔍 Debug Info")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.purple)
-                    .padding(.bottom, 2)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Strokes: \(handwritingViewModel.currentDrawing.strokes.count)")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(.primary)
-                    
-                    Text("Auto Recognition: \(handwritingViewModel.autoRecognitionEnabled ? "✅ ON" : "❌ OFF")")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(handwritingViewModel.autoRecognitionEnabled ? .green : .red)
-                    
-                    Text("Recognition Delay: \(handwritingViewModel.recognitionDelay, specifier: "%.1f")s")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(.primary)
-                    
-                    Text("Finger Drawing: \(handwritingViewModel.allowsFingerDrawing ? "✅ ON" : "❌ OFF")")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(handwritingViewModel.allowsFingerDrawing ? .green : .red)
-                    
-                    Text("Meeting ID: \(handwritingViewModel.meetingId?.uuidString.prefix(8) ?? "nil")")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(.primary)
-                    
-                    Text("Meeting Store: \(handwritingViewModel.meetingStore != nil ? "✅ Connected" : "❌ Disconnected")")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(handwritingViewModel.meetingStore != nil ? .green : .red)
-                    
-                    Text("Recognized Text: '\(handwritingViewModel.recognizedText.isEmpty ? "None" : handwritingViewModel.recognizedText)'")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(handwritingViewModel.recognizedText.isEmpty ? .secondary : .blue)
-                    
-                    // Recognition Status
-                    Text("Recognition Status: \(handwritingViewModel.isRecognizing ? "🔄 Processing..." : "⏹️ Idle")")
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(handwritingViewModel.isRecognizing ? .orange : .secondary)
-                }
-                
-                // Debug buttons
-                HStack(spacing: 8) {
-                    Button(action: {
-                        print("📝 [DEBUG] Manual recognition button pressed")
-                        handwritingViewModel.forceRecognition()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 11))
-                            Text("Recognize")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(.purple)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                    
-                    Button(action: {
-                        print("📝 [DEBUG] Clear button pressed")
-                        handwritingViewModel.clearDrawing()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 11))
-                            Text("Clear")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                    
-                    Button(action: {
-                        print("📝 [DEBUG] Toggle auto recognition")
-                        handwritingViewModel.setAutoRecognition(enabled: !handwritingViewModel.autoRecognitionEnabled)
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: handwritingViewModel.autoRecognitionEnabled ? "pause.circle" : "play.circle")
-                                .font(.system(size: 11))
-                            Text("Auto")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(handwritingViewModel.autoRecognitionEnabled ? .orange : .green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background((handwritingViewModel.autoRecognitionEnabled ? Color.orange : Color.green).opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                    
-                    Button(action: {
-                        print("📝 [DEBUG] Reset service button pressed")
-                        handwritingViewModel.recognitionService.resetService()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "restart.circle")
-                                .font(.system(size: 11))
-                            Text("Reset Service")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(UIColor.tertiarySystemBackground))
-        }
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-    
-    // MARK: - Recognition Results Section
-    
-    private var recognitionResultsSection: some View {
+    private var handNoteSection: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
                 HStack(spacing: 8) {
-                    Image(systemName: "hand.draw")
+                    Image(systemName: "hand.write")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.blue)
                     
-                    Text("Recognition Results")
+                    Text("Hand Notes")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -425,95 +308,186 @@ struct MeetingRecordingView: View {
             .padding(.vertical, 12)
             .background(Color(UIColor.secondarySystemBackground))
             
-            // Recognition Content (Always Visible)
+            // Hand Notes Content
             VStack(alignment: .leading, spacing: 12) {
-                // Recognized Text
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Recognized Text")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                        
-                        Text(handwritingViewModel.recognizedText.isEmpty ? "No text recognized yet" : handwritingViewModel.recognizedText)
-                            .font(.system(size: 16))
-                            .foregroundColor(handwritingViewModel.recognizedText.isEmpty ? .secondary : .primary)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(UIColor.tertiarySystemBackground))
-                            .cornerRadius(8)
-                    }
-                    
-                    // Action buttons
+                if handwritingViewModel.recognizedText.isEmpty {
                     VStack(spacing: 8) {
-                        Button(action: copyRecognizedText) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(handwritingViewModel.recognizedText.isEmpty ? .secondary : .blue)
-                                .frame(width: 32, height: 32)
-                                .background((handwritingViewModel.recognizedText.isEmpty ? Color.secondary : Color.blue).opacity(0.1))
+                        Image(systemName: "hand.draw")
+                            .font(.system(size: 24))
+                            .foregroundColor(.gray.opacity(0.6))
+                        
+                        Text("Write with Apple Pencil or finger")
+                            .font(.system(size: 16))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Your handwritten notes will appear here")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                } else {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("RECOGNIZED TEXT")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.secondary)
+                            
+                            Text(handwritingViewModel.recognizedText)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.1))
                                 .cornerRadius(8)
                         }
-                        .disabled(handwritingViewModel.recognizedText.isEmpty)
                         
-                        Button(action: saveRecognizedText) {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(handwritingViewModel.recognizedText.isEmpty ? .secondary : .green)
-                                .frame(width: 32, height: 32)
-                                .background((handwritingViewModel.recognizedText.isEmpty ? Color.secondary : Color.green).opacity(0.1))
-                                .cornerRadius(8)
+                        VStack(spacing: 8) {
+                            Button(action: copyRecognizedText) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.blue)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                            
+                            Button(action: saveRecognizedText) {
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.green)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color.green.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
                         }
-                        .disabled(handwritingViewModel.recognizedText.isEmpty)
-                    }
-                }
-                
-                // Recognition Stats (Always Visible)
-                HStack(spacing: 16) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "text.word.spacing")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        Text("\(handwritingViewModel.textElements.count) elements")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
                     }
                     
-                    HStack(spacing: 4) {
-                        Image(systemName: "gauge.medium")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        Text("\(handwritingViewModel.textElements.isEmpty ? "0" : String(Int(averageConfidence * 100)))% confidence")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                    // Recognition Stats
+                    if !handwritingViewModel.textElements.isEmpty {
+                        HStack(spacing: 16) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.text")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Text("\(handwritingViewModel.textElements.count) elements")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Text("\(Int(averageConfidence * 100))% confidence")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Text("Last: \(formattedLastRecognitionTime)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 8)
                     }
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        Text("Last: \(handwritingViewModel.recognizedText.isEmpty ? "Never" : Date().formatted(date: .omitted, time: .shortened))")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.vertical, 12)
+            .background(Color(UIColor.systemBackground))
         }
         .background(Color(UIColor.systemBackground))
         .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: handwritingViewModel.recognizedText)
+    }
+    
+    // MARK: - Debug Overlay Section (Compact)
+    
+    private var debugOverlaySection: some View {
+        VStack(spacing: 8) {
+            // Compact Header
+            HStack(spacing: 6) {
+                Text("🔍")
+                    .font(.system(size: 12))
+                Text("Debug")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.purple)
+                Spacer()
+            }
+            
+            // Essential Debug Info (Compact)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Strokes: \(handwritingViewModel.currentDrawing.strokes.count)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.primary)
+                
+                Text("Auto: \(handwritingViewModel.autoRecognitionEnabled ? "✅" : "❌")")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(handwritingViewModel.autoRecognitionEnabled ? .green : .red)
+                
+                Text("Status: \(handwritingViewModel.isRecognizing ? "🔄" : "⏹️")")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(handwritingViewModel.isRecognizing ? .orange : .secondary)
+            }
+            
+            // Compact Debug Buttons
+            HStack(spacing: 4) {
+                Button(action: {
+                    print("📝 [DEBUG] Manual recognition button pressed")
+                    handwritingViewModel.forceRecognition()
+                }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10))
+                        .foregroundColor(.purple)
+                        .frame(width: 20, height: 20)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(4)
+                }
+                
+                Button(action: {
+                    print("📝 [DEBUG] Clear button pressed")
+                    handwritingViewModel.clearDrawing()
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundColor(.red)
+                        .frame(width: 20, height: 20)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(4)
+                }
+                
+                Button(action: {
+                    print("📝 [DEBUG] Toggle auto recognition")
+                    handwritingViewModel.setAutoRecognition(enabled: !handwritingViewModel.autoRecognitionEnabled)
+                }) {
+                    Image(systemName: handwritingViewModel.autoRecognitionEnabled ? "pause.circle" : "play.circle")
+                        .font(.system(size: 10))
+                        .foregroundColor(handwritingViewModel.autoRecognitionEnabled ? .orange : .green)
+                        .frame(width: 20, height: 20)
+                        .background((handwritingViewModel.autoRecognitionEnabled ? Color.orange : Color.green).opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(UIColor.systemBackground).opacity(0.9))
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+        .frame(maxWidth: 140)
     }
     
     // MARK: - Recognition Computed Properties
@@ -522,6 +496,12 @@ struct MeetingRecordingView: View {
         guard !handwritingViewModel.textElements.isEmpty else { return 0.0 }
         let totalConfidence = handwritingViewModel.textElements.reduce(0) { $0 + $1.confidence }
         return totalConfidence / Float(handwritingViewModel.textElements.count)
+    }
+    
+    private var formattedLastRecognitionTime: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: Date())
     }
     
     // MARK: - Drawing Tools View
