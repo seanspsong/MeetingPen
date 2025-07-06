@@ -36,12 +36,12 @@ struct MeetingRecordingView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Simple header without recording controls
-                simpleHeaderView
-                
-                // Main content area - always left-right layout
+            ZStack {
+                // Main content area - always left-right layout (full screen)
                 horizontalLayout(geometry: geometry)
+                
+                // Floating control bar
+                floatingControlBar
             }
         }
         .navigationBarHidden(true)
@@ -60,68 +60,6 @@ struct MeetingRecordingView: View {
         .sheet(isPresented: $showingSettings) {
             HandwritingSettingsView(viewModel: handwritingViewModel)
         }
-    }
-    
-    // MARK: - Simple Header View
-    
-    private var simpleHeaderView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(meetingTitle)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                HStack {
-                    // Recording indicator
-                    if audioRecordingService.isRecording {
-                        Image(systemName: "record.circle.fill")
-                            .foregroundColor(.red)
-                        Text("Recording: \(formattedRecordingDuration)")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .monospacedDigit()
-                    }
-                    // Playback indicator
-                    else if audioRecordingService.isPlaying {
-                        Image(systemName: "play.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Playing: \(formattedPlaybackDuration)")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .monospacedDigit()
-                    }
-                    // Idle state
-                    else {
-                        Image(systemName: "circle")
-                            .foregroundColor(.gray)
-                        Text(formattedRecordingDuration)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            // Secondary controls only
-            HStack(spacing: 16) {
-                Button(action: { showingSettings = true }) {
-                    Image(systemName: "gear")
-                        .font(.title2)
-                        .foregroundColor(.blue)
-                }
-                
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .shadow(radius: 1)
     }
     
     // MARK: - Original Header View (unused)
@@ -308,59 +246,125 @@ struct MeetingRecordingView: View {
                 .padding(.horizontal)
                 
                 Spacer()
-                
-                // Recording controls moved here (red section)
-                recordingControlsView
             }
             .padding(.top, 8)
         }
         .background(Color(UIColor.systemBackground))
     }
     
-    // MARK: - Recording Controls View (Red Section)
+    // MARK: - Floating Control Bar
     
-    private var recordingControlsView: some View {
-        VStack(spacing: 12) {
-            Text("Recording Controls")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.primary)
+    private var floatingControlBar: some View {
+        VStack {
+            Spacer()
             
-            // Main controls (left: record, right: play)
-            HStack(spacing: 24) {
-                // Left button - Recording (red)
-                Button(action: toggleRecording) {
-                    VStack(spacing: 4) {
-                        Image(systemName: audioRecordingService.isRecording ? "stop.circle.fill" : "record.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(audioRecordingService.isRecording ? .red : .red)
+            HStack(spacing: 12) {
+                // Meeting title, status and recording controls
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(meetingTitle)
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundColor(.primary)
                         
-                        Text(audioRecordingService.isRecording ? "Stop" : "Record")
-                            .font(.caption)
+                        HStack(spacing: 5) {
+                            // Status indicator
+                            Circle()
+                                .fill(audioRecordingService.isRecording ? Color.red : 
+                                      audioRecordingService.isPlaying ? Color.green : Color.gray)
+                                .frame(width: 9, height: 9)
+                            
+                            Text(audioRecordingService.isRecording ? "Recording" : 
+                                 audioRecordingService.isPlaying ? "Playing" : "Ready")
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                            
+                            Text(formattedRecordingDuration)
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                    
+                    // Record and Play buttons (moved here)
+                    HStack(spacing: 9) {
+                        // Record button
+                        Button(action: toggleRecording) {
+                            Image(systemName: audioRecordingService.isRecording ? "stop.circle.fill" : "record.circle.fill")
+                                .font(.system(size: 27))
+                                .foregroundColor(.red)
+                        }
+                        .disabled(audioRecordingService.isPlaying)
+                        
+                        // Play button
+                        Button(action: togglePlayback) {
+                            Image(systemName: audioRecordingService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 27))
+                                .foregroundColor(.green)
+                        }
+                        .disabled(audioRecordingService.isRecording || !hasRecordedAudio)
+                    }
+                }
+                
+                Spacer()
+                
+                // Drawing tools - compact
+                HStack(spacing: 9) {
+                    Button(action: { selectPenTool() }) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 24))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Button(action: { selectHighlighterTool() }) {
+                        Image(systemName: "highlighter")
+                            .font(.system(size: 24))
+                            .foregroundColor(.yellow)
+                    }
+                    
+                    Button(action: { selectEraserTool() }) {
+                        Image(systemName: "eraser")
+                            .font(.system(size: 24))
+                            .foregroundColor(.orange)
+                    }
+                    
+                    Button(action: { handwritingViewModel.clearDrawing() }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 24))
                             .foregroundColor(.red)
                     }
-                }
-                .disabled(audioRecordingService.isPlaying) // Cannot record while playing
-                
-                // Right button - Playback (green)
-                Button(action: togglePlayback) {
-                    VStack(spacing: 4) {
-                        Image(systemName: audioRecordingService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(audioRecordingService.isPlaying ? .green : .green)
-                        
-                        Text(audioRecordingService.isPlaying ? "Stop" : "Play")
-                            .font(.caption)
-                            .foregroundColor(.green)
+                    
+                    Button(action: { handwritingViewModel.recognizeCurrentDrawing() }) {
+                        Image(systemName: "textformat.abc")
+                            .font(.system(size: 24))
+                            .foregroundColor(.blue)
                     }
                 }
-                .disabled(audioRecordingService.isRecording || !hasRecordedAudio) // Cannot play while recording or if no audio
+                
+                // Settings and close
+                HStack(spacing: 9) {
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gear")
+                            .font(.system(size: 24))
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(UIColor.systemBackground))
+                    .shadow(color: Color.black.opacity(0.1), radius: 9, x: 0, y: -4)
+            )
+            .padding(.bottom, 15)
         }
-        .padding()
-        .background(Color(UIColor.secondarySystemBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
-        .padding(.bottom)
     }
     
     // MARK: - Handwriting Canvas View
@@ -392,22 +396,19 @@ struct MeetingRecordingView: View {
                     }
                 )
                 
-                // Debug View Overlay (Bottom Left)
+                // Debug View Overlay (Bottom Right)
                 if showDebugView {
                     VStack {
                         Spacer()
                         HStack {
-                            debugOverlaySection
                             Spacer()
+                            debugOverlaySection
                         }
                     }
                     .padding(.bottom, 20)
-                    .padding(.leading, 20)
+                    .padding(.trailing, 20)
                 }
             }
-            
-            // Drawing tools moved here (green section)
-            drawingToolsView
         }
     }
     
@@ -638,108 +639,6 @@ struct MeetingRecordingView: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: Date())
-    }
-    
-    // MARK: - Drawing Tools View (Green Section)
-    
-    private var drawingToolsView: some View {
-        VStack(spacing: 12) {
-            Text("Drawing Tools")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.primary)
-            
-            // Tool buttons in a grid layout
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 16) {
-                // Pen tool
-                Button(action: { selectPenTool() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 24))
-                            .foregroundColor(.primary)
-                        Text("Pen")
-                            .font(.caption)
-                            .foregroundColor(.primary)
-                    }
-                }
-                
-                // Highlighter tool
-                Button(action: { selectHighlighterTool() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "highlighter")
-                            .font(.system(size: 24))
-                            .foregroundColor(.yellow)
-                        Text("Marker")
-                            .font(.caption)
-                            .foregroundColor(.yellow)
-                    }
-                }
-                
-                // Eraser tool
-                Button(action: { selectEraserTool() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "eraser")
-                            .font(.system(size: 24))
-                            .foregroundColor(.red)
-                        Text("Eraser")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                }
-                
-                // Clear all
-                Button(action: { handwritingViewModel.clearDrawing() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 24))
-                            .foregroundColor(.red)
-                        Text("Clear")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-            
-            Divider()
-            
-            // Recognition controls
-            HStack(spacing: 20) {
-                // Manual recognition trigger
-                Button(action: { handwritingViewModel.recognizeCurrentDrawing() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "textformat.abc")
-                            .font(.system(size: 20))
-                            .foregroundColor(.blue)
-                        Text("Recognize")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
-                
-                Spacer()
-                
-                // Undo last action
-                Button(action: { handwritingViewModel.clearDrawing() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "arrow.uturn.backward")
-                            .font(.system(size: 20))
-                            .foregroundColor(.orange)
-                        Text("Undo")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(Color(UIColor.secondarySystemBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
-        .padding(.bottom)
     }
     
     // MARK: - Helper Views and Computed Properties
