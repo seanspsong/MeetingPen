@@ -19,6 +19,7 @@ struct MeetingRecordingView: View {
     @StateObject private var speechRecognitionService = SpeechRecognitionService.shared
     @State private var showingToolPicker = false
     @State private var showingSettings = false
+    @AppStorage("showDebugView") private var showDebugView = false
     
     private var meetingTitle: String {
         meeting.title
@@ -233,8 +234,10 @@ struct MeetingRecordingView: View {
     
     private var handwritingCanvasView: some View {
         VStack(spacing: 0) {
-            // Debug Info Section (Always Visible)
-            debugSection
+            // Debug Info Section (Conditionally Visible)
+            if showDebugView {
+                debugSection
+            }
             
             // Handwriting Recognition Section (Always Visible)
             recognitionResultsSection
@@ -261,7 +264,7 @@ struct MeetingRecordingView: View {
         }
     }
     
-    // MARK: - Debug Section (Always Visible)
+    // MARK: - Debug Section (Conditionally Visible)
     
     private var debugSection: some View {
         VStack(spacing: 0) {

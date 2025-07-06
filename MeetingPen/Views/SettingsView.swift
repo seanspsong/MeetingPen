@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("audioQuality") private var audioQuality = "high"
     @AppStorage("allowFingerDrawing") private var allowFingerDrawing = false
     @AppStorage("hapticFeedback") private var hapticFeedback = true
+    @AppStorage("showDebugView") private var showDebugView = false
     
     @State private var showingAPIKeyAlert = false
     @State private var showingAbout = false
@@ -60,6 +61,8 @@ struct SettingsView: View {
                 }
                 
                 Toggle("Allow Finger Drawing", isOn: $allowFingerDrawing)
+                
+                Toggle("Show Debug View", isOn: $showDebugView)
             }
             
             // Audio Settings

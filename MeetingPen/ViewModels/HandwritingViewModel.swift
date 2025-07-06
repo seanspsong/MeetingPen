@@ -308,7 +308,7 @@ class HandwritingViewModel: ObservableObject {
         
         // Set defaults if not previously set
         if defaults.object(forKey: "handwriting.autoRecognition") == nil {
-            autoRecognitionEnabled = false  // Default to disabled for testing
+            autoRecognitionEnabled = true  // Default to enabled for automatic recognition
         } else {
             autoRecognitionEnabled = defaults.bool(forKey: "handwriting.autoRecognition")
         }
