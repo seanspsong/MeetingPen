@@ -20,6 +20,7 @@ struct MeetingRecordingView: View {
     @State private var showingToolPicker = false
     @State private var showingSettings = false
     @AppStorage("showDebugView") private var showDebugView = false
+    @State private var showRecognitionStats = false
     
     private var meetingTitle: String {
         meeting.title
@@ -416,6 +417,29 @@ struct MeetingRecordingView: View {
                         .padding(.bottom, 20)
                         .padding(.trailing, 20)
                     }
+                    
+                    // Floating Stats Toggle Button (Right Side)
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showRecognitionStats.toggle()
+                            }) {
+                                Image(systemName: showRecognitionStats ? "chart.bar.fill" : "chart.bar")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundColor(.blue)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(Color(UIColor.systemBackground))
+                                            .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                    )
+                            }
+                            .padding(.trailing, 20)
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 20)
                 }
                 .frame(height: geometry.size.height * 0.4)
             }
@@ -460,75 +484,46 @@ struct MeetingRecordingView: View {
                 if handwritingViewModel.recognizedText.isEmpty {
                     Spacer()
                     
-                    VStack(spacing: 20) {
-                        Image(systemName: "hand.draw")
-                            .font(.system(size: 54))
-                            .foregroundColor(.gray.opacity(0.6))
+                    VStack(spacing: 12) {
+                        Text("Write with Apple Pencil or finger")
+                            .font(.system(size: 26, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         
-                        VStack(spacing: 12) {
-                            Text("Write with Apple Pencil or finger")
-                                .font(.system(size: 26, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                            
-                            Text("Your handwritten notes will appear here")
-                                .font(.system(size: 20))
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
+                        Text("Your handwritten notes will appear here")
+                            .font(.system(size: 20))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     
                     Spacer()
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("RECOGNIZED TEXT")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.secondary)
-                            
-                            Text(handwritingViewModel.recognizedText)
-                                .font(.system(size: 26, weight: .medium))
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 20)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(16)
-                            
-                            HStack(spacing: 20) {
-                                Button(action: copyRecognizedText) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.system(size: 20, weight: .medium))
-                                        Text("Copy")
-                                            .font(.system(size: 20, weight: .medium))
+                            // Display each text element as a bullet point
+                            ForEach(handwritingViewModel.textElements.indices, id: \.self) { index in
+                                HStack(alignment: .top, spacing: 12) {
+                                    // Blue bullet with black dot
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.blue)
+                                            .frame(width: 12, height: 12)
+                                        Circle()
+                                            .fill(Color.black)
+                                            .frame(width: 4, height: 4)
                                     }
-                                    .foregroundColor(.blue)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 16)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(14)
+                                    .padding(.top, 8)
+                                    
+                                    Text(handwritingViewModel.textElements[index].text)
+                                        .font(.system(size: 22, weight: .medium))
+                                        .foregroundColor(.primary)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                
-                                Button(action: saveRecognizedText) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "square.and.arrow.down")
-                                            .font(.system(size: 20, weight: .medium))
-                                        Text("Save")
-                                            .font(.system(size: 20, weight: .medium))
-                                    }
-                                    .foregroundColor(.green)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 16)
-                                    .background(Color.green.opacity(0.1))
-                                    .cornerRadius(14)
-                                }
-                                
-                                Spacer()
                             }
                             
-                            if !handwritingViewModel.textElements.isEmpty {
+                            // Recognition stats (conditional)
+                            if showRecognitionStats && !handwritingViewModel.textElements.isEmpty {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("RECOGNITION STATS")
                                         .font(.system(size: 16, weight: .medium))
@@ -796,22 +791,7 @@ struct MeetingRecordingView: View {
     
     // MARK: - Recognition Actions
     
-    private func copyRecognizedText() {
-        UIPasteboard.general.string = handwritingViewModel.recognizedText
-        
-        // Show feedback (you could add haptic feedback here)
-        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-        impactFeedback.impactOccurred()
-    }
-    
-    private func saveRecognizedText() {
-        // Save to meeting notes
-        handwritingViewModel.saveToMeeting()
-        
-        // Show feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
-    }
+    // Copy and save actions removed - replaced with floating stats toggle button
 }
 
 // MARK: - Waveform Visualization (Placeholder)
