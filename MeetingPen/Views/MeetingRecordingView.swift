@@ -19,6 +19,7 @@ struct MeetingRecordingView: View {
     @StateObject private var speechRecognitionService = SpeechRecognitionService.shared
     @State private var showingToolPicker = false
     @State private var showingSettings = false
+    @State private var showingCancelConfirmation = false // Add confirmation dialog state
     @AppStorage("showDebugView") private var showDebugView = false
     @State private var showRecognitionStats = false
     
@@ -50,6 +51,9 @@ struct MeetingRecordingView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
+            // Clear any previous transcription data when starting a new meeting
+            speechRecognitionService.clearTranscription()
+            
             // Setup handwriting recognition for current meeting
             handwritingViewModel.meetingStore = meetingStore
             handwritingViewModel.loadFromMeeting(meetingId: meeting.id)
@@ -64,6 +68,16 @@ struct MeetingRecordingView: View {
         }
         .sheet(isPresented: $showingSettings) {
             HandwritingSettingsView(viewModel: handwritingViewModel)
+        }
+        .confirmationDialog("Close Meeting", isPresented: $showingCancelConfirmation) {
+            Button("Continue Recording", role: .cancel) {
+                // Do nothing - just dismiss the dialog and continue
+            }
+            Button("Delete Meeting", role: .destructive) {
+                deleteMeetingAndClose()
+            }
+        } message: {
+            Text("Do you want to delete this meeting? All recordings and notes will be lost.")
         }
     }
     
@@ -392,7 +406,7 @@ struct MeetingRecordingView: View {
                     }
                     
                     // Cancel button
-                    Button(action: cancelAndClose) {
+                    Button(action: { showingCancelConfirmation = true }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 28))
                             .foregroundColor(.red)
@@ -852,21 +866,24 @@ struct MeetingRecordingView: View {
         print("✅ Meeting saved and closed")
     }
     
-    private func cancelAndClose() {
-        // Stop any active recording without saving
+
+    
+    private func deleteMeetingAndClose() {
+        // Stop any active recording
         if audioRecordingService.isRecording {
-            audioRecordingService.stopRecording()
+            stopRecording()
         }
         
         // Stop any active playback
         if audioRecordingService.isPlaying {
-            audioRecordingService.stopPlayback()
+            stopPlayback()
         }
         
-        // Close the view without saving
+        // Delete meeting and close the view
+        meetingStore.deleteMeeting(meeting)
         isPresented = false
         
-        print("❌ Meeting cancelled and closed")
+        print("✅ Meeting deleted and closed")
     }
     
     // MARK: - Recognition Actions
