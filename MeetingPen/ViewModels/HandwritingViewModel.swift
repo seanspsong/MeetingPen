@@ -18,14 +18,16 @@ class HandwritingViewModel: ObservableObject {
     
     // MARK: - Recognition Settings
     @Published var autoRecognitionEnabled = true
-    @Published var recognitionDelay: TimeInterval = 1.0
+    @Published var recognitionDelay: TimeInterval = 2.0  // Increased default delay
     @Published var minimumConfidence: Float = 0.3
+    @Published var postClearDelay: TimeInterval = 3.0  // Extra delay after clearing
     
     // MARK: - Private Properties
     let recognitionService = HandwritingRecognitionService()  // Public access for debug controls
     private var cancellables = Set<AnyCancellable>()
     var meetingId: UUID?  // Made public for debug access
     var meetingStore: MeetingStore?
+    private var lastClearTime: Date?  // Track when canvas was last cleared
     
     // MARK: - Initialization
     
@@ -86,6 +88,17 @@ class HandwritingViewModel: ObservableObject {
     
     /// Perform automatic recognition (uses cache for performance)
     func performAutoRecognition() {
+        // Check if enough time has passed since clearing
+        if let lastClear = lastClearTime {
+            let timeSinceClear = Date().timeIntervalSince(lastClear)
+            if timeSinceClear < postClearDelay {
+                print("🖊️ [DEBUG] Auto recognition blocked - only \(String(format: "%.1f", timeSinceClear))s since clear (need \(postClearDelay)s)")
+                return
+            } else {
+                print("🖊️ [DEBUG] Auto recognition allowed - \(String(format: "%.1f", timeSinceClear))s since clear")
+            }
+        }
+        
         performRecognition(bypassCache: false, source: "AUTO")
     }
     
@@ -161,6 +174,7 @@ class HandwritingViewModel: ObservableObject {
         recognizedText = ""
         textElements = []
         recognitionError = nil
+        lastClearTime = Date()  // Record clear time
         
         // Clear the recognition cache to ensure fresh processing
         recognitionService.clearCache()
@@ -171,6 +185,7 @@ class HandwritingViewModel: ObservableObject {
         print("🖊️ [DEBUG] Clearing canvas only, preserving recognized text")
         currentDrawing = PKDrawing()
         recognitionError = nil
+        lastClearTime = Date()  // Record clear time
         
         // Clear the recognition cache to ensure fresh processing
         recognitionService.clearCache()
@@ -313,7 +328,13 @@ class HandwritingViewModel: ObservableObject {
     
     /// Set the recognition delay
     func setRecognitionDelay(_ delay: TimeInterval) {
-        recognitionDelay = max(0.1, min(5.0, delay))
+        recognitionDelay = max(1.0, min(5.0, delay))  // Increased minimum
+        saveUserPreferences()
+    }
+    
+    /// Set the post-clear delay
+    func setPostClearDelay(_ delay: TimeInterval) {
+        postClearDelay = max(2.0, min(10.0, delay))
         saveUserPreferences()
     }
     
@@ -382,12 +403,14 @@ class HandwritingViewModel: ObservableObject {
         }
         
         recognitionDelay = defaults.double(forKey: "handwriting.recognitionDelay")
+        postClearDelay = defaults.double(forKey: "handwriting.postClearDelay")
         minimumConfidence = defaults.float(forKey: "handwriting.minimumConfidence")
         allowsFingerDrawing = defaults.bool(forKey: "handwriting.allowsFingerDrawing")
         showRecognitionPreview = defaults.bool(forKey: "handwriting.showRecognitionPreview")
         
         // Set other defaults if not previously set
-        if recognitionDelay == 0 { recognitionDelay = 1.0 }
+        if recognitionDelay == 0 { recognitionDelay = 2.0 }  // Increased default
+        if postClearDelay == 0 { postClearDelay = 3.0 }  // New setting
         if minimumConfidence == 0 { minimumConfidence = 0.3 }
         if defaults.object(forKey: "handwriting.allowsFingerDrawing") == nil { allowsFingerDrawing = true }
         if defaults.object(forKey: "handwriting.showRecognitionPreview") == nil { showRecognitionPreview = true }
@@ -398,6 +421,7 @@ class HandwritingViewModel: ObservableObject {
         
         defaults.set(autoRecognitionEnabled, forKey: "handwriting.autoRecognition")
         defaults.set(recognitionDelay, forKey: "handwriting.recognitionDelay")
+        defaults.set(postClearDelay, forKey: "handwriting.postClearDelay")
         defaults.set(minimumConfidence, forKey: "handwriting.minimumConfidence")
         defaults.set(allowsFingerDrawing, forKey: "handwriting.allowsFingerDrawing")
         defaults.set(showRecognitionPreview, forKey: "handwriting.showRecognitionPreview")

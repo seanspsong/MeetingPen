@@ -962,9 +962,28 @@ struct HandwritingSettingsView: View {
                         
                         Slider(
                             value: $viewModel.recognitionDelay,
-                            in: 0.1...5.0,
+                            in: 1.0...5.0,
                             step: 0.1
                         )
+                    }
+                    
+                    VStack {
+                        HStack {
+                            Text("Post-Clear Delay")
+                            Spacer()
+                            Text("\(viewModel.postClearDelay, specifier: "%.1f")s")
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Slider(
+                            value: $viewModel.postClearDelay,
+                            in: 2.0...10.0,
+                            step: 0.5
+                        )
+                        
+                        Text("Delay before recognition starts after clearing canvas")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
                     VStack {

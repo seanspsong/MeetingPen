@@ -86,6 +86,8 @@ struct HandwritingCanvasView: UIViewRepresentable {
     class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: HandwritingCanvasView
         private var recognitionTimer: Timer?
+        private var lastStrokeTime: Date?
+        private var strokeCount = 0
         
         init(_ parent: HandwritingCanvasView) {
             self.parent = parent
@@ -97,6 +99,9 @@ struct HandwritingCanvasView: UIViewRepresentable {
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             print("🎨 [DEBUG] canvasViewDrawingDidChange called - strokes: \(canvasView.drawing.strokes.count)")
             
+            lastStrokeTime = Date()
+            strokeCount = canvasView.drawing.strokes.count
+            
             // Update the binding
             parent.drawing = canvasView.drawing
             
@@ -104,19 +109,26 @@ struct HandwritingCanvasView: UIViewRepresentable {
             print("🎨 [DEBUG] Calling onDrawingChange callback...")
             parent.onDrawingChange?(canvasView.drawing)
             
-            // Schedule text recognition
+            // Schedule text recognition with improved logic
             print("🎨 [DEBUG] Scheduling text recognition...")
             scheduleTextRecognition(for: canvasView.drawing)
         }
         
         func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
-            // Optional: Handle tool usage start
+            print("🎨 [DEBUG] canvasViewDidBeginUsingTool called")
+            // Cancel any pending recognition while actively drawing
+            recognitionTimer?.invalidate()
         }
         
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
-            print("🎨 [DEBUG] canvasViewDidEndUsingTool called - triggering immediate recognition")
-            // Trigger immediate recognition when user stops drawing
-            triggerRecognition(for: canvasView.drawing)
+            print("🎨 [DEBUG] canvasViewDidEndUsingTool called - strokes: \(canvasView.drawing.strokes.count)")
+            
+            // Don't trigger immediate recognition anymore - let the timer handle it
+            // This prevents the "every letter" issue after clearing
+            print("🎨 [DEBUG] Tool ended - letting scheduled recognition handle this")
+            
+            // Only schedule recognition, don't trigger immediately
+            scheduleTextRecognition(for: canvasView.drawing)
         }
         
         // MARK: - Text Recognition
@@ -129,15 +141,30 @@ struct HandwritingCanvasView: UIViewRepresentable {
                 return 
             }
             
-            print("🎨 [DEBUG] Scheduling recognition with delay: \(parent.recognitionDelay)s")
+            guard !drawing.strokes.isEmpty else {
+                print("🎨 [DEBUG] No strokes, skipping recognition")
+                return
+            }
+            
+            // Use longer delay for better word recognition
+            let delayToUse = max(parent.recognitionDelay, 2.0)  // Minimum 2 seconds
+            print("🎨 [DEBUG] Scheduling recognition with delay: \(delayToUse)s")
             
             // Cancel previous timer
             recognitionTimer?.invalidate()
             
-            // Schedule new recognition
-            recognitionTimer = Timer.scheduledTimer(withTimeInterval: parent.recognitionDelay, repeats: false) { [weak self] _ in
-                print("🎨 [DEBUG] Recognition timer fired!")
-                self?.triggerRecognition(for: drawing)
+            // Schedule new recognition with longer delay
+            recognitionTimer = Timer.scheduledTimer(withTimeInterval: delayToUse, repeats: false) { [weak self] _ in
+                print("🎨 [DEBUG] Recognition timer fired after \(delayToUse)s delay!")
+                
+                // Additional check: only trigger if user hasn't been actively drawing recently
+                if let lastStroke = self?.lastStrokeTime,
+                   Date().timeIntervalSince(lastStroke) >= 1.0 {  // Wait 1 second after last stroke
+                    print("🎨 [DEBUG] Triggering recognition - last stroke was \(Date().timeIntervalSince(lastStroke))s ago")
+                    self?.triggerRecognition(for: drawing)
+                } else {
+                    print("🎨 [DEBUG] Skipping recognition - user still actively drawing")
+                }
             }
         }
         
