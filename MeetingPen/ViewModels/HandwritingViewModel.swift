@@ -225,18 +225,35 @@ class HandwritingViewModel: ObservableObject {
         }
         
         print("🖊️ [DEBUG] Found meeting: '\(meeting.title)'")
-        print("🖊️ [DEBUG] Current handwritten notes: '\(meeting.handwrittenNotes)'")
+        print("🖊️ [DEBUG] Current handwritten notes: '\(meeting.handwritingData.allRecognizedText)'")
         
-        // Update the meeting with handwritten notes
-        meetingStore.updateMeetingHandwrittenNotes(meeting, notes: recognizedText)
+        // Update the meeting with handwritten notes and drawing data
+        var updatedMeeting = meeting
+        updatedMeeting.handwritingData.textSegments.append(
+            HandwritingTextSegment(
+                recognizedText: recognizedText,
+                confidence: 0.85,
+                boundingBox: .zero,
+                timestamp: Date().timeIntervalSince1970,
+                pageIndex: 0
+            )
+        )
         
         // Also save drawing data to the meeting
-        var updatedMeeting = meeting
-        updatedMeeting.drawingData = currentDrawing.dataRepresentation()
+        let drawingData = currentDrawing.dataRepresentation()
+        var drawingObject = HandwritingDrawing(
+            boundingBox: .zero,
+            timestamp: Date().timeIntervalSince1970,
+            pageIndex: 0,
+            title: "Handwriting \(Date().formatted(date: .omitted, time: .shortened))"
+        )
+        drawingObject.drawingData = drawingData
+        updatedMeeting.handwritingData.drawings.append(drawingObject)
+        
         meetingStore.updateMeeting(updatedMeeting)
         
         print("✅ [DEBUG] Saved handwriting to meeting: '\(recognizedText)'")
-        print("🖊️ [DEBUG] Updated meeting handwritten notes: '\(updatedMeeting.handwrittenNotes)'")
+        print("🖊️ [DEBUG] Updated meeting handwritten notes: '\(updatedMeeting.handwritingData.allRecognizedText)'")
     }
     
     /// Load drawing and recognized text from a meeting
@@ -250,12 +267,15 @@ class HandwritingViewModel: ObservableObject {
         }
         
         // Load handwritten notes
-        recognizedText = meeting.handwrittenNotes
+        recognizedText = meeting.handwritingData.allRecognizedText
         
         // Load drawing data if available
-        if let drawingData = meeting.drawingData,
+        if let lastDrawing = meeting.handwritingData.drawings.last,
+           let drawingData = lastDrawing.drawingData,
            let drawing = try? PKDrawing(data: drawingData) {
             currentDrawing = drawing
+        } else {
+            currentDrawing = PKDrawing()
         }
         
         print("📖 Loaded handwriting from meeting: '\(recognizedText)'")

@@ -137,13 +137,13 @@ struct MeetingDetailView: View {
     private var summaryTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if !meeting.aiSummary.isEmpty {
+                if !meeting.aiAnalysis.summary.isEmpty {
                     aiSummaryCard
                 } else {
                     generateSummaryCard
                 }
                 
-                if !meeting.keyDecisions.isEmpty {
+                if !meeting.aiAnalysis.keyDecisions.isEmpty {
                     keyDecisionsCard
                 }
                 
@@ -160,12 +160,12 @@ struct MeetingDetailView: View {
     private var transcriptTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if !meeting.transcript.isEmpty {
+                if !meeting.transcriptData.fullText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Audio Transcript")
                             .font(.headline)
                         
-                        Text(meeting.transcript)
+                        Text(meeting.transcriptData.fullText)
                             .font(.body)
                             .textSelection(.enabled)
                             .padding()
@@ -200,12 +200,12 @@ struct MeetingDetailView: View {
     private var notesTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if !meeting.handwrittenNotes.isEmpty {
+                if !meeting.handwritingData.allRecognizedText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Handwritten Notes")
                             .font(.headline)
                         
-                        Text(meeting.handwrittenNotes)
+                        Text(meeting.handwritingData.allRecognizedText)
                             .font(.body)
                             .textSelection(.enabled)
                             .padding()
@@ -240,17 +240,18 @@ struct MeetingDetailView: View {
     private var actionItemsTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if !meeting.actionItems.isEmpty {
+                if !meeting.aiAnalysis.actionItems.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Action Items")
                             .font(.headline)
                         
-                        ForEach(meeting.actionItems.indices, id: \.self) { index in
+                        ForEach(meeting.aiAnalysis.actionItems.indices, id: \.self) { index in
                             ActionItemRow(
-                                actionItem: meeting.actionItems[index],
-                                onToggle: { isCompleted in
-                                    meeting.actionItems[index].isCompleted = isCompleted
-                                    meetingStore.updateMeeting(meeting)
+                                actionItem: meeting.aiAnalysis.actionItems[index],
+                                onToggle: { status in
+                                    var updatedMeeting = meeting
+                                    updatedMeeting.aiAnalysis.actionItems[index].status = status
+                                    meetingStore.updateMeeting(updatedMeeting)
                                 }
                             )
                         }
@@ -291,7 +292,7 @@ struct MeetingDetailView: View {
                 Spacer()
             }
             
-            Text(meeting.aiSummary)
+            Text(meeting.aiAnalysis.summary)
                 .font(.body)
                 .textSelection(.enabled)
         }
@@ -338,7 +339,7 @@ struct MeetingDetailView: View {
                 Spacer()
             }
             
-            ForEach(meeting.keyDecisions, id: \.self) { decision in
+            ForEach(meeting.aiAnalysis.keyDecisions, id: \.self) { decision in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
@@ -387,20 +388,23 @@ struct MeetingDetailView: View {
 
 struct ActionItemRow: View {
     let actionItem: ActionItem
-    let onToggle: (Bool) -> Void
+    let onToggle: (ActionItemStatus) -> Void
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Button(action: { onToggle(!actionItem.isCompleted) }) {
-                Image(systemName: actionItem.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(actionItem.isCompleted ? .green : .secondary)
+            Button(action: { 
+                let newStatus: ActionItemStatus = actionItem.status == .completed ? .pending : .completed
+                onToggle(newStatus) 
+            }) {
+                Image(systemName: actionItem.status == .completed ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(actionItem.status == .completed ? .green : .secondary)
             }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(actionItem.title)
                     .font(.body)
-                    .strikethrough(actionItem.isCompleted)
-                    .foregroundColor(actionItem.isCompleted ? .secondary : .primary)
+                    .strikethrough(actionItem.status == .completed)
+                    .foregroundColor(actionItem.status == .completed ? .secondary : .primary)
                 
                 if !actionItem.assignee.isEmpty {
                     Text("Assigned to: \(actionItem.assignee)")

@@ -233,7 +233,7 @@ struct MeetingRecordingView: View {
                             }
                         }
                         
-                        if speechRecognitionService.transcribedText.isEmpty {
+                        if speechRecognitionService.transcribedSentences.isEmpty {
                             Text("Transcription will appear here when recording starts...")
                                 .font(.body)
                                 .foregroundColor(.secondary)
@@ -241,10 +241,14 @@ struct MeetingRecordingView: View {
                                 .padding(.horizontal, 8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
-                            Text(speechRecognitionService.transcribedText)
-                                .font(.body)
-                                .padding(.horizontal, 8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(speechRecognitionService.transcribedSentences.indices, id: \.self) { index in
+                                    Text(speechRecognitionService.transcribedSentences[index])
+                                        .font(.body)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .padding(.horizontal, 8)
                         }
                     }
                 }

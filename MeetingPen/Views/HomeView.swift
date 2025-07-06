@@ -287,13 +287,13 @@ struct MeetingCardView: View {
                 }
                 
                 // Action Items
-                if !meeting.actionItems.isEmpty {
+                if !meeting.aiAnalysis.actionItems.isEmpty {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle")
                             .font(.caption2)
                             .foregroundColor(.orange)
                         
-                        Text("\(meeting.actionItems.count) action items")
+                        Text("\(meeting.aiAnalysis.actionItems.count) action items")
                             .font(.caption2)
                             .foregroundColor(.orange)
                     }

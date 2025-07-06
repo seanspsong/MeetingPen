@@ -7,6 +7,7 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     static let shared = SpeechRecognitionService()
     
     @Published var transcribedText = ""
+    @Published var transcribedSentences: [String] = []
     @Published var isTranscribing = false
     @Published var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
     
@@ -92,8 +93,10 @@ class SpeechRecognitionService: NSObject, ObservableObject {
             recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                 DispatchQueue.main.async {
                     if let result = result {
-                        self?.transcribedText = result.bestTranscription.formattedString
-                        print("🎙️ Transcribed: \(result.bestTranscription.formattedString)")
+                        let newText = result.bestTranscription.formattedString
+                        self?.transcribedText = newText
+                        self?.parseSentences(from: newText)
+                        print("🎙️ Transcribed: \(newText)")
                     }
                     
                     if error != nil || result?.isFinal == true {
@@ -131,6 +134,51 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     
     func clearTranscription() {
         transcribedText = ""
+        transcribedSentences = []
+    }
+    
+    private func parseSentences(from text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        
+        // Simply use the full text as the current content, replacing everything
+        // This prevents duplicates and confusion from partial sentence parsing
+        
+        // Split into natural sentence boundaries
+        let sentences = trimmedText.components(separatedBy: CharacterSet(charactersIn: ".!?"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count > 5 } // Filter very short fragments
+        
+        // Clear and rebuild the sentences array to avoid duplicates
+        let newSentences = sentences.filter { sentence in
+            // Only include sentences that are meaningful
+            return sentence.count > 5 && sentence.split(separator: " ").count > 2
+        }
+        
+        // Only update if we have new content
+        if newSentences != transcribedSentences {
+            transcribedSentences = newSentences
+        }
+        
+        // Handle ongoing incomplete sentence
+        if !trimmedText.hasSuffix(".") && !trimmedText.hasSuffix("!") && !trimmedText.hasSuffix("?") {
+            let incompleteSentence = trimmedText.components(separatedBy: CharacterSet(charactersIn: ".!?")).last?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            
+            if !incompleteSentence.isEmpty && incompleteSentence.count > 5 {
+                // Add or update the incomplete sentence
+                if transcribedSentences.isEmpty || !transcribedSentences.contains(incompleteSentence) {
+                    transcribedSentences.append(incompleteSentence)
+                } else {
+                    // Update the last sentence if it's similar but longer
+                    if let lastIndex = transcribedSentences.lastIndex(where: { incompleteSentence.hasPrefix($0) || $0.hasPrefix(incompleteSentence) }) {
+                        transcribedSentences[lastIndex] = incompleteSentence
+                    }
+                }
+            }
+        }
+        
+        print("🎙️ Sentences: \(transcribedSentences.count)")
     }
     
     // Save transcription to meeting
@@ -138,8 +186,14 @@ class SpeechRecognitionService: NSObject, ObservableObject {
         guard !transcribedText.isEmpty else { return }
         
         if let meetingIndex = meetingStore.meetings.firstIndex(where: { $0.id == meetingId }) {
-            meetingStore.meetings[meetingIndex].transcript = transcribedText
-            print("💾 Saved transcription to meeting: \(transcribedText.prefix(50))...")
+            // Save the sentence-by-sentence breakdown as the transcript
+            let formattedTranscript = transcribedSentences.enumerated()
+                .map { "[\($0.offset + 1)] \($0.element)" }
+                .joined(separator: "\n")
+            
+            meetingStore.meetings[meetingIndex].transcriptData.fullText = formattedTranscript.isEmpty ? transcribedText : formattedTranscript
+            
+            print("💾 Saved transcription to meeting: \(transcribedSentences.count) sentences")
         }
     }
 }
