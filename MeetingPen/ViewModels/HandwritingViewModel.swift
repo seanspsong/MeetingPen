@@ -74,6 +74,11 @@ class HandwritingViewModel: ObservableObject {
     
     // MARK: - Public Methods
     
+    /// Configure handwriting recognition language
+    func configureLanguage(_ locale: String) {
+        recognitionService.configureLanguage(locale)
+    }
+    
     /// Start handwriting recognition for the current drawing (manual recognition bypasses cache)
     func recognizeCurrentDrawing() {
         performRecognition(bypassCache: true, source: "MANUAL")

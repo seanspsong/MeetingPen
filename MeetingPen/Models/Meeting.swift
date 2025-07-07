@@ -5,6 +5,58 @@ import CoreGraphics
 
 // CGRect is already Codable in iOS 14+ / macOS 11+
 
+// MARK: - Meeting Language Support
+enum MeetingLanguage: String, CaseIterable, Codable {
+    case english = "en-US"
+    case japanese = "ja-JP"
+    case chinese = "zh-CN"
+    case spanish = "es-ES"
+    case italian = "it-IT"
+    case german = "de-DE"
+    case french = "fr-FR"
+    
+    var displayName: String {
+        switch self {
+        case .english: return "English"
+        case .japanese: return "Japanese"
+        case .chinese: return "Chinese"
+        case .spanish: return "Spanish"
+        case .italian: return "Italian"
+        case .german: return "German"
+        case .french: return "French"
+        }
+    }
+    
+    var speechRecognitionLocale: String {
+        return self.rawValue
+    }
+    
+    var handwritingRecognitionLocale: String {
+        // Map to appropriate Vision Framework locale codes
+        switch self {
+        case .english: return "en-US"
+        case .japanese: return "ja-JP"
+        case .chinese: return "zh-Hans"
+        case .spanish: return "es-ES"
+        case .italian: return "it-IT"
+        case .german: return "de-DE"
+        case .french: return "fr-FR"
+        }
+    }
+    
+    var flag: String {
+        switch self {
+        case .english: return "🇺🇸"
+        case .japanese: return "🇯🇵"
+        case .chinese: return "🇨🇳"
+        case .spanish: return "🇪🇸"
+        case .italian: return "🇮🇹"
+        case .german: return "🇩🇪"
+        case .french: return "🇫🇷"
+        }
+    }
+}
+
 // MARK: - Main Meeting Model
 struct Meeting: Identifiable, Codable {
     let id: UUID
@@ -16,6 +68,7 @@ struct Meeting: Identifiable, Codable {
     var location: String?
     var isRecording: Bool
     var status: MeetingStatus
+    var language: MeetingLanguage
     
     // Core data components
     var audioData: AudioData
@@ -28,7 +81,7 @@ struct Meeting: Identifiable, Codable {
     var lastModified: Date
     var version: Int
     
-    init(title: String, participants: [String] = [], location: String? = nil, tags: [String] = []) {
+    init(title: String, participants: [String] = [], location: String? = nil, tags: [String] = [], language: MeetingLanguage = .english) {
         self.id = UUID()
         self.title = title
         self.date = Date()
@@ -38,6 +91,7 @@ struct Meeting: Identifiable, Codable {
         self.location = location
         self.isRecording = false
         self.status = .created
+        self.language = language
         
         self.audioData = AudioData()
         self.transcriptData = TranscriptData()

@@ -112,6 +112,9 @@ class OpenAIService: ObservableObject {
         let handwrittenNotes = meeting.handwritingData.allRecognizedText.isEmpty ? "No handwritten notes available" : meeting.handwritingData.allRecognizedText
         let duration = meeting.duration > 0 ? "\(Int(meeting.duration / 60)) minutes" : "Duration not recorded"
         
+        // Get language instruction based on meeting language
+        let languageInstruction = getLanguageInstruction(for: meeting.language)
+        
         return """
         You are an expert meeting analyst. Create a concise, professional summary of this meeting.
 
@@ -135,6 +138,8 @@ class OpenAIService: ObservableObject {
         - Use clear, business-appropriate language
         - If data is limited, focus on what is available
 
+        \(languageInstruction)
+
         Generate only the summary text, no additional formatting or headers.
         """
     }
@@ -148,6 +153,9 @@ class OpenAIService: ObservableObject {
         let transcription = meeting.transcriptData.fullText.isEmpty ? "No audio transcription available" : meeting.transcriptData.fullText
         let handwrittenNotes = meeting.handwritingData.allRecognizedText.isEmpty ? "No handwritten notes available" : meeting.handwritingData.allRecognizedText
         let duration = meeting.duration > 0 ? "\(Int(meeting.duration / 60)) minutes" : "Duration not recorded"
+        
+        // Get language instruction based on meeting language
+        let languageInstruction = getLanguageInstruction(for: meeting.language)
         
         return """
         You are an expert meeting notes generator. Your task is to create comprehensive, professional meeting notes from the provided meeting data.
@@ -181,8 +189,30 @@ class OpenAIService: ObservableObject {
 
         4. If the input data is minimal or unclear, still provide a structured format with available information.
 
+        \(languageInstruction)
+
         Generate professional meeting notes following this structure. Use markdown formatting for headers and bullet points.
         """
+    }
+    
+    /// Get language-specific instruction for AI generation
+    private func getLanguageInstruction(for language: MeetingLanguage) -> String {
+        switch language {
+        case .english:
+            return "IMPORTANT: Generate all content in English."
+        case .japanese:
+            return "重要: すべてのコンテンツを日本語で生成してください。適切な敬語を使用し、ビジネス文書としての品質を保ってください。"
+        case .chinese:
+            return "重要：请用中文生成所有内容。使用正式的商务语言，确保专业性和准确性。"
+        case .spanish:
+            return "IMPORTANTE: Genere todo el contenido en español. Use un lenguaje profesional y apropiado para documentos comerciales."
+        case .italian:
+            return "IMPORTANTE: Genera tutto il contenuto in italiano. Usa un linguaggio professionale e appropriato per documenti aziendali."
+        case .german:
+            return "WICHTIG: Generieren Sie alle Inhalte auf Deutsch. Verwenden Sie eine professionelle Sprache, die für Geschäftsdokumente geeignet ist."
+        case .french:
+            return "IMPORTANT : Générez tout le contenu en français. Utilisez un langage professionnel approprié pour les documents commerciaux."
+        }
     }
     
     /// Create a chat completion request for OpenAI API

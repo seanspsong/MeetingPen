@@ -10,6 +10,7 @@ struct MeetingDetailView: View {
     @State private var showingEditSheet = false
     @State private var showingDeleteAlert = false
     @State private var showingShareSheet = false
+    @State private var showingSettingsSheet = false
     
     init(meeting: Meeting) {
         self._meeting = State(initialValue: meeting)
@@ -70,6 +71,12 @@ struct MeetingDetailView: View {
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(meeting: meeting)
         }
+        .sheet(isPresented: $showingSettingsSheet) {
+            MeetingSettingsView(meeting: meeting) { updatedMeeting in
+                meetingStore.updateMeeting(updatedMeeting)
+                meeting = updatedMeeting
+            }
+        }
     }
     
     // MARK: - Meeting Header
@@ -99,6 +106,12 @@ struct MeetingDetailView: View {
                     }
                     
                     Menu {
+                        Button("Meeting Settings") {
+                            showingSettingsSheet = true
+                        }
+                        
+                        Divider()
+                        
                         Button("Delete Meeting") {
                             showingDeleteAlert = true
                         }

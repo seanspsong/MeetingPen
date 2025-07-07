@@ -6,7 +6,7 @@ import UIKit
 struct MeetingRecordingView: View {
     
     // MARK: - Properties
-    let meeting: Meeting
+    @State private var meeting: Meeting
     @Binding var isPresented: Bool
     let shouldStartRecording: Bool // New parameter to control auto-start
     
@@ -22,6 +22,8 @@ struct MeetingRecordingView: View {
     @State private var showingCancelConfirmation = false // Add confirmation dialog state
     @AppStorage("showDebugView") private var showDebugView = false
     @State private var showRecognitionStats = false
+    @State private var currentLanguage: MeetingLanguage
+    @State private var showingLanguageMenu = false
     
     private var meetingTitle: String {
         meeting.title
@@ -31,9 +33,10 @@ struct MeetingRecordingView: View {
     
     // MARK: - Initializer
     init(meeting: Meeting, isPresented: Binding<Bool>, shouldStartRecording: Bool = false) {
-        self.meeting = meeting
+        self._meeting = State(initialValue: meeting)
         self._isPresented = isPresented
         self.shouldStartRecording = shouldStartRecording
+        self._currentLanguage = State(initialValue: meeting.language)
     }
     
     var body: some View {
@@ -51,6 +54,10 @@ struct MeetingRecordingView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
+            // Configure language settings for the meeting
+            speechRecognitionService.configureLanguage(currentLanguage.speechRecognitionLocale)
+            handwritingViewModel.configureLanguage(currentLanguage.handwritingRecognitionLocale)
+            
             // Clear any previous transcription data when starting a new meeting
             speechRecognitionService.clearTranscription()
             
@@ -363,8 +370,28 @@ struct MeetingRecordingView: View {
                     }
                 }
                 
-                // Settings
+                // Language Switcher & Settings
                 HStack(spacing: 9) {
+                    // Language Switcher
+                    Menu {
+                        ForEach(MeetingLanguage.allCases, id: \.self) { language in
+                            Button {
+                                switchLanguage(to: language)
+                            } label: {
+                                HStack {
+                                    Text(language.flag)
+                                    Text(language.displayName)
+                                    if currentLanguage == language {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(currentLanguage.flag)
+                            .font(.system(size: 24))
+                    }
+                    
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gear")
                             .font(.system(size: 24))
@@ -754,6 +781,26 @@ struct MeetingRecordingView: View {
     }
     
     // MARK: - Actions
+    
+    private func switchLanguage(to language: MeetingLanguage) {
+        guard language != currentLanguage else { return }
+        
+        currentLanguage = language
+        
+        // Update the local meeting state and the meeting store
+        meeting.language = language
+        meetingStore.updateMeeting(meeting)
+        
+        // Reconfigure the services with the new language
+        print("🌍 Language switched to: \(language.displayName)")
+        print("🌍 Speech recognition locale: \(language.speechRecognitionLocale)")
+        print("🌍 Handwriting recognition locale: \(language.handwritingRecognitionLocale)")
+        
+        speechRecognitionService.configureLanguage(language.speechRecognitionLocale)
+        handwritingViewModel.configureLanguage(language.handwritingRecognitionLocale)
+        
+        print("🌍 Both services reconfigured for new language")
+    }
     
     private func toggleRecording() {
         if audioRecordingService.isRecording {

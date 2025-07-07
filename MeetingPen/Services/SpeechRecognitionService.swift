@@ -11,13 +11,15 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     @Published var isTranscribing = false
     @Published var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
     
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    private var currentLocale: String = "en-US"
     
     override init() {
         super.init()
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: currentLocale))
         speechRecognizer?.delegate = self
         // Request authorization early to avoid first-run failures
         requestAuthorization()
@@ -30,6 +32,21 @@ class SpeechRecognitionService: NSObject, ObservableObject {
                 print("🎙️ Speech recognition authorization: \(authStatus.rawValue)")
             }
         }
+    }
+    
+    func configureLanguage(_ locale: String) {
+        guard locale != currentLocale else { return }
+        
+        // Stop any existing transcription
+        if isTranscribing {
+            stopTranscribing()
+        }
+        
+        currentLocale = locale
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: locale))
+        speechRecognizer?.delegate = self
+        
+        print("🎙️ Speech recognizer configured for locale: \(locale)")
     }
     
     func startTranscribing() {
@@ -185,13 +202,17 @@ class SpeechRecognitionService: NSObject, ObservableObject {
     func saveTranscription(to meetingStore: MeetingStore, meetingId: UUID) {
         guard !transcribedText.isEmpty else { return }
         
-        if let meetingIndex = meetingStore.meetings.firstIndex(where: { $0.id == meetingId }) {
+        if let meeting = meetingStore.meetings.first(where: { $0.id == meetingId }) {
             // Save the sentence-by-sentence breakdown as the transcript
             let formattedTranscript = transcribedSentences.enumerated()
                 .map { "[\($0.offset + 1)] \($0.element)" }
                 .joined(separator: "\n")
             
-            meetingStore.meetings[meetingIndex].transcriptData.fullText = formattedTranscript.isEmpty ? transcribedText : formattedTranscript
+            var updatedMeeting = meeting
+            updatedMeeting.transcriptData.fullText = formattedTranscript.isEmpty ? transcribedText : formattedTranscript
+            
+            // Use updateMeeting to ensure persistence
+            meetingStore.updateMeeting(updatedMeeting)
             
             print("💾 Saved transcription to meeting: \(transcribedSentences.count) sentences")
         }

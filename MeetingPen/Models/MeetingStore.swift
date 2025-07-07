@@ -26,6 +26,14 @@ class MeetingStore: ObservableObject {
         saveMeetings()
     }
     
+    func createMeeting(title: String, participants: [String] = [], location: String? = nil, tags: [String] = [], language: MeetingLanguage) {
+        let meeting = Meeting(title: title, participants: participants, location: location, tags: tags, language: language)
+        meetings.insert(meeting, at: 0)
+        currentMeeting = meeting
+        saveMeetings()
+        print("💾 Created new meeting '\(title)' with language: \(language.displayName)")
+    }
+    
     func updateMeeting(_ meeting: Meeting) {
         if let index = meetings.firstIndex(where: { $0.id == meeting.id }) {
             var updatedMeeting = meeting
@@ -445,38 +453,51 @@ class MeetingStore: ObservableObject {
     // MARK: - Persistence
     
     private func loadMeetings() {
-        // Load sample data for development
-        if meetings.isEmpty {
-            meetings = Meeting.sampleMeetings
-        }
+        print("💾 Loading meetings from UserDefaults...")
         
-        // TODO: Implement actual persistence with Core Data or JSON
-        // For now, we'll use sample data
-        
-        /*
-        if let data = userDefaults.data(forKey: meetingsKey),
-           let decodedMeetings = try? JSONDecoder().decode([Meeting].self, from: data) {
-            meetings = decodedMeetings
+        // Try to load saved meetings from UserDefaults
+        if let data = userDefaults.data(forKey: meetingsKey) {
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let decodedMeetings = try decoder.decode([Meeting].self, from: data)
+                meetings = decodedMeetings
+                print("💾 Successfully loaded \(meetings.count) meetings from storage")
+                return
+            } catch {
+                print("❌ Failed to decode saved meetings: \(error)")
+                print("💾 Will use sample data instead")
+            }
         } else {
-            meetings = Meeting.sampleMeetings
+            print("💾 No saved meetings found, will use sample data")
         }
-        */
+        
+        // Fallback to sample data if no saved meetings or decoding failed
+        meetings = Meeting.sampleMeetings
+        print("💾 Loaded \(meetings.count) sample meetings")
+        
+        // Save the sample data so it persists
+        saveMeetings()
     }
     
     private func saveMeetings() {
-        // TODO: Implement actual persistence with proper file management
-        // For now, we'll just keep in memory
+        print("💾 Saving \(meetings.count) meetings to UserDefaults...")
         
-        /*
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .prettyPrinted // For debugging
             let encoded = try encoder.encode(meetings)
             userDefaults.set(encoded, forKey: meetingsKey)
+            
+            // Force synchronization to disk
+            userDefaults.synchronize()
+            
+            print("💾 Successfully saved meetings to storage (\(encoded.count) bytes)")
         } catch {
-            print("Failed to save meetings: \(error)")
+            print("❌ Failed to save meetings: \(error)")
+            print("❌ Error details: \(error.localizedDescription)")
         }
-        */
     }
     
     // MARK: - Meeting Navigation

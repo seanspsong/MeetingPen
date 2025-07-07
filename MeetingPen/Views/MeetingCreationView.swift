@@ -7,6 +7,7 @@ struct MeetingCreationView: View {
     @State private var title = ""
     @State private var participants: [String] = []
     @State private var newParticipant = ""
+    @State private var selectedLanguage: MeetingLanguage = .english
 
     
     // Optional binding for when used as a sheet
@@ -63,6 +64,31 @@ struct MeetingCreationView: View {
                     
                     TextField("Description (optional)", text: .constant(""))
                         .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                
+                Section(header: Text("Language")) {
+                    Picker("Language", selection: $selectedLanguage) {
+                        ForEach(MeetingLanguage.allCases, id: \.self) { language in
+                            HStack {
+                                Text(language.flag)
+                                    .font(.title2)
+                                Text(language.displayName)
+                                    .font(.body)
+                            }
+                            .tag(language)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("This will be used for audio transcription and handwriting recognition")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Section(header: Text("Participants")) {
@@ -223,7 +249,7 @@ struct MeetingCreationView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         
-        meetingStore.createMeeting(title: trimmedTitle, participants: participants)
+        meetingStore.createMeeting(title: trimmedTitle, participants: participants, language: selectedLanguage)
         dismissView()
     }
     
@@ -231,15 +257,16 @@ struct MeetingCreationView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         
-        meetingStore.createMeeting(title: trimmedTitle, participants: participants)
+        meetingStore.createMeeting(title: trimmedTitle, participants: participants, language: selectedLanguage)
         
-        if let newMeeting = meetingStore.currentMeeting {
-            // Dismiss the creation view first
-            dismissView()
-            
-            // Then trigger the recording via callback
-            onMeetingCreatedWithRecording?(newMeeting)
-        }
+        // Get the newly created meeting
+        guard let newMeeting = meetingStore.currentMeeting else { return }
+        
+        // Dismiss the creation view first
+        dismissView()
+        
+        // Then trigger the recording via callback
+        onMeetingCreatedWithRecording?(newMeeting)
     }
 }
 

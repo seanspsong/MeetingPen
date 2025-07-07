@@ -19,11 +19,21 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
     private var recognitionAttemptCount = 0
     
     // MARK: - Recognition Configuration
-    private let recognitionLanguages = ["en-US", "en-GB"] // Can be expanded
+    private var recognitionLanguages = ["en-US", "en-GB"] // Can be expanded
     private let minimumTextHeight: Float = 1.0  // Very small for finger drawings
     private let recognitionLevel: VNRequestTextRecognitionLevel = .accurate  // Try accurate for better results
     
     // MARK: - Public Methods
+    
+    /// Configure handwriting recognition language
+    /// - Parameter locale: The locale string for handwriting recognition
+    func configureLanguage(_ locale: String) {
+        let previousLanguages = recognitionLanguages
+        recognitionLanguages = [locale]
+        print("🖊️ Handwriting recognizer configured for locale: \(locale)")
+        print("🖊️ Previous languages: \(previousLanguages) → New languages: \(recognitionLanguages)")
+        print("🖊️ Auto language detection will be disabled to use: \(locale)")
+    }
     
     /// Recognize text from a PencilKit drawing
     /// - Parameters:
@@ -136,7 +146,7 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
             request.minimumTextHeight = 0.0  // Accept any size text
             
             // Additional optimizations for handwriting
-            request.automaticallyDetectsLanguage = true  // Enable for better detection
+            request.automaticallyDetectsLanguage = false  // Disable auto-detection to respect language setting
             request.customWords = []  // Clear custom words
             
             // Use latest revision for best results
@@ -144,12 +154,13 @@ class HandwritingRecognitionService: NSObject, ObservableObject {
                 request.revision = VNRecognizeTextRequestRevision3  // Latest revision
             }
             
-            print("🔍 [DEBUG] Vision request configured - Level: accurate, MinHeight: 0.0, AutoLanguage: true")
+            print("🔍 [DEBUG] Vision request configured - Level: accurate, MinHeight: 0.0, AutoLanguage: false")
             
             print("🔍 [DEBUG] Performing Vision recognition...")
             print("🔍 [DEBUG] Recognition level: \(recognitionLevel)")
             print("🔍 [DEBUG] Recognition languages: \(recognitionLanguages)")
             print("🔍 [DEBUG] Minimum text height: \(minimumTextHeight)")
+            print("🔍 [DEBUG] Auto language detection disabled - using specific locale: \(recognitionLanguages.first ?? "none")")
             
             // Perform recognition with fresh handler each time
             print("🔍 [DEBUG] Creating fresh VNImageRequestHandler...")
