@@ -249,6 +249,78 @@ class MeetingStore: ObservableObject {
         updateMeeting(updatedMeeting)
     }
     
+    // MARK: - OpenAI AI Generation
+    
+    /// Generate AI summary using OpenAI O3 model
+    /// - Parameters:
+    ///   - meeting: The meeting to generate summary for
+    ///   - completion: Completion handler with success/failure result
+    func generateAISummary(for meeting: Meeting, completion: @escaping (Result<Void, Error>) -> Void) {
+        print("📝 [DEBUG] Starting AI summary generation for meeting: \(meeting.title)")
+        
+        // Use OpenAI service to generate summary
+        OpenAIService.shared.generateMeetingSummary(for: meeting) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let summary):
+                    print("✅ [DEBUG] Successfully generated AI summary (\(summary.count) characters)")
+                    
+                    // Update the meeting with AI summary
+                    var updatedMeeting = meeting
+                    updatedMeeting.aiAnalysis.summary = summary
+                    
+                    self?.updateMeeting(updatedMeeting)
+                    completion(.success(()))
+                    
+                case .failure(let error):
+                    print("❌ [DEBUG] Failed to generate AI summary: \(error.localizedDescription)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+    
+    /// Generate detailed meeting notes using OpenAI O3 model
+    /// - Parameters:
+    ///   - meeting: The meeting to generate notes for
+    ///   - completion: Completion handler with success/failure result
+    func generateMeetingNotes(for meeting: Meeting, completion: @escaping (Result<Void, Error>) -> Void) {
+        print("📝 [DEBUG] Starting meeting notes generation for meeting: \(meeting.title)")
+        
+        // Use OpenAI service to generate notes
+        OpenAIService.shared.generateMeetingNotes(for: meeting) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let generatedNotes):
+                    print("✅ [DEBUG] Successfully generated meeting notes (\(generatedNotes.count) characters)")
+                    
+                    // Update the meeting with generated notes
+                    var updatedMeeting = meeting
+                    updatedMeeting.aiAnalysis.generatedNotes = generatedNotes
+                    updatedMeeting.aiAnalysis.notesGeneratedAt = Date()
+                    updatedMeeting.aiAnalysis.notesGenerationModel = "gpt-4o-mini"
+                    
+                    self?.updateMeeting(updatedMeeting)
+                    completion(.success(()))
+                    
+                case .failure(let error):
+                    print("❌ [DEBUG] Failed to generate meeting notes: \(error.localizedDescription)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+    
+    /// Clear generated notes from a meeting
+    /// - Parameter meeting: The meeting to clear notes from
+    func clearGeneratedNotes(for meeting: Meeting) {
+        var updatedMeeting = meeting
+        updatedMeeting.aiAnalysis.generatedNotes = ""
+        updatedMeeting.aiAnalysis.notesGeneratedAt = nil
+        updatedMeeting.aiAnalysis.notesGenerationModel = nil
+        updateMeeting(updatedMeeting)
+    }
+    
     // MARK: - Search and Filter
     
     func searchMeetings(query: String) -> [Meeting] {

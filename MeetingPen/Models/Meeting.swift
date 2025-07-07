@@ -421,6 +421,11 @@ struct AIAnalysis: Codable {
     var processingTime: TimeInterval
     var confidence: Double
     
+    // OpenAI O3 Generated Meeting Notes
+    var generatedNotes: String
+    var notesGeneratedAt: Date?
+    var notesGenerationModel: String?
+    
     init() {
         self.summary = ""
         self.actionItems = []
@@ -432,6 +437,13 @@ struct AIAnalysis: Codable {
         self.insights = []
         self.processingTime = 0
         self.confidence = 0.0
+        self.generatedNotes = ""
+        self.notesGeneratedAt = nil
+        self.notesGenerationModel = nil
+    }
+    
+    var hasGeneratedNotes: Bool {
+        !generatedNotes.isEmpty
     }
 }
 

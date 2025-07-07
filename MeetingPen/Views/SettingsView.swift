@@ -33,9 +33,13 @@ struct SettingsView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                     
                     if openAIAPIKey.isEmpty {
-                        Text("Required for AI-powered meeting summaries")
+                        Text("Required for AI-powered meeting summaries and notes")
                             .font(.caption)
                             .foregroundColor(.orange)
+                    } else {
+                        Text("✓ API key configured")
+                            .font(.caption)
+                            .foregroundColor(.green)
                     }
                     
                     Button("Get API Key") {
@@ -129,7 +133,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("You need an OpenAI API key to use AI-powered meeting summaries. Visit the OpenAI website to get your key.")
+            Text("You need an OpenAI API key to use AI-powered meeting summaries and detailed meeting notes. Visit the OpenAI website to get your key. The app uses the GPT-4o-mini model for cost-effective and reliable AI generation.")
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
