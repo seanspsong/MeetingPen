@@ -58,7 +58,7 @@ enum MeetingLanguage: String, CaseIterable, Codable {
 }
 
 // MARK: - Main Meeting Model
-struct Meeting: Identifiable, Codable {
+struct Meeting: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var date: Date
@@ -178,7 +178,7 @@ enum MeetingStatus: String, Codable, CaseIterable {
 }
 
 // MARK: - Audio Data Model
-struct AudioData: Codable {
+struct AudioData: Codable, Equatable {
     var segments: [AudioSegment]
     var totalDuration: TimeInterval
     var sampleRate: Double
@@ -203,7 +203,7 @@ struct AudioData: Codable {
     }
 }
 
-struct AudioSegment: Identifiable, Codable {
+struct AudioSegment: Identifiable, Codable, Equatable {
     let id: UUID
     var fileURL: URL?
     var fileName: String
@@ -236,7 +236,7 @@ enum AudioFormat: String, Codable, CaseIterable {
 }
 
 // MARK: - Transcript Data Model
-struct TranscriptData: Codable {
+struct TranscriptData: Codable, Equatable {
     var segments: [TranscriptSegment]
     var fullText: String
     var language: String
@@ -260,7 +260,7 @@ struct TranscriptData: Codable {
     }
 }
 
-struct TranscriptSegment: Identifiable, Codable {
+struct TranscriptSegment: Identifiable, Codable, Equatable {
     let id: UUID
     var text: String
     var startTime: TimeInterval
@@ -293,7 +293,7 @@ struct TranscriptSegment: Identifiable, Codable {
     }
 }
 
-struct TranscriptWord: Codable {
+struct TranscriptWord: Codable, Equatable {
     var text: String
     var startTime: TimeInterval
     var endTime: TimeInterval
@@ -307,7 +307,7 @@ struct TranscriptWord: Codable {
     }
 }
 
-struct Speaker: Identifiable, Codable {
+struct Speaker: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     var identifier: String
@@ -322,7 +322,7 @@ struct Speaker: Identifiable, Codable {
     }
 }
 
-struct VoiceProfile: Codable {
+struct VoiceProfile: Codable, Equatable {
     var pitch: Double
     var tone: Double
     var pace: Double
@@ -337,7 +337,7 @@ struct VoiceProfile: Codable {
 }
 
 // MARK: - Handwriting Data Model
-struct MeetingHandwritingData: Codable {
+struct MeetingHandwritingData: Codable, Equatable {
     var textSegments: [HandwritingTextSegment]
     var drawings: [HandwritingDrawing]
     var pages: [HandwritingPage]
@@ -396,7 +396,7 @@ struct MeetingHandwritingData: Codable {
     }
 }
 
-struct HandwritingTextSegment: Identifiable, Codable {
+struct HandwritingTextSegment: Identifiable, Codable, Equatable {
     let id: UUID
     var recognizedText: String
     var originalText: String // User-corrected version
@@ -423,7 +423,7 @@ struct HandwritingTextSegment: Identifiable, Codable {
     }
 }
 
-struct HandwritingDrawing: Identifiable, Codable {
+struct HandwritingDrawing: Identifiable, Codable, Equatable {
     let id: UUID
     var imageData: Data? // PNG/JPEG data
     var drawingData: Data? // PKDrawing data
@@ -445,7 +445,7 @@ struct HandwritingDrawing: Identifiable, Codable {
     }
 }
 
-struct HandwritingPage: Identifiable, Codable {
+struct HandwritingPage: Identifiable, Codable, Equatable {
     let id: UUID
     var pageNumber: Int
     var backgroundImage: Data?
@@ -463,7 +463,7 @@ struct HandwritingPage: Identifiable, Codable {
 }
 
 // MARK: - AI Analysis Model
-struct AIAnalysis: Codable {
+struct AIAnalysis: Codable, Equatable {
     var summary: String
     var actionItems: [ActionItem]
     var keyDecisions: [String]
@@ -501,7 +501,7 @@ struct AIAnalysis: Codable {
     }
 }
 
-struct ActionItem: Identifiable, Codable {
+struct ActionItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var description: String
@@ -558,7 +558,7 @@ enum ActionItemStatus: String, Codable, CaseIterable {
     }
 }
 
-struct SentimentAnalysis: Codable {
+struct SentimentAnalysis: Codable, Equatable {
     var overall: Double // -1 to 1
     var positive: Double
     var negative: Double
@@ -584,7 +584,7 @@ struct SentimentAnalysis: Codable {
     }
 }
 
-struct Entity: Identifiable, Codable {
+struct Entity: Identifiable, Codable, Equatable {
     let id: UUID
     var text: String
     var type: EntityType
@@ -615,7 +615,7 @@ enum EntityType: String, Codable, CaseIterable {
     }
 }
 
-struct EntityMention: Codable {
+struct EntityMention: Codable, Equatable {
     var startOffset: Int
     var endOffset: Int
     var context: String
@@ -629,7 +629,7 @@ struct EntityMention: Codable {
     }
 }
 
-struct Insight: Identifiable, Codable {
+struct Insight: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var description: String

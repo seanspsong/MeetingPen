@@ -102,6 +102,50 @@ class OpenAIService: ObservableObject {
         }
     }
     
+    /// Generate action items from meeting content using OpenAI
+    /// - Parameters:
+    ///   - meeting: The meeting data to extract action items from
+    ///   - completion: Completion handler with generated action items or error
+    func generateActionItems(for meeting: Meeting, completion: @escaping (Result<[ActionItem], Error>) -> Void) {
+        print("🤖 [DEBUG] Starting action items generation with OpenAI")
+        
+        guard !apiKey.isEmpty else {
+            let error = OpenAIError.invalidAPIKey
+            print("❌ [DEBUG] OpenAI API key not configured")
+            completion(.failure(error))
+            return
+        }
+        
+        isGenerating = true
+        generationError = nil
+        
+        // Prepare the prompt with meeting data
+        let prompt = createActionItemsPrompt(for: meeting)
+        print("🤖 [DEBUG] Generated action items prompt (\(prompt.count) characters)")
+        
+        // Create the request
+        let request = createChatCompletionRequest(prompt: prompt)
+        
+        // Make the API call
+        performAPICall(request: request) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isGenerating = false
+                
+                switch result {
+                case .success(let response):
+                    print("✅ [DEBUG] Successfully generated action items response")
+                    let actionItems = self?.parseActionItems(from: response) ?? []
+                    print("✅ [DEBUG] Parsed \(actionItems.count) action items")
+                    completion(.success(actionItems))
+                case .failure(let error):
+                    print("❌ [DEBUG] Failed to generate action items: \(error.localizedDescription)")
+                    self?.generationError = error
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+    
     /// Create a focused prompt for meeting summary generation
     private func createMeetingSummaryPrompt(for meeting: Meeting) -> String {
         let dateFormatter = DateFormatter()
@@ -193,6 +237,141 @@ class OpenAIService: ObservableObject {
 
         Generate professional meeting notes following this structure. Use markdown formatting for headers and bullet points.
         """
+    }
+    
+    /// Create a focused prompt for action items generation
+    private func createActionItemsPrompt(for meeting: Meeting) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .full
+        dateFormatter.timeStyle = .short
+        
+        let transcription = meeting.transcriptData.fullText.isEmpty ? "No audio transcription available" : meeting.transcriptData.fullText
+        let handwrittenNotes = meeting.handwritingData.allRecognizedText.isEmpty ? "No handwritten notes available" : meeting.handwritingData.allRecognizedText
+        let duration = meeting.duration > 0 ? "\(Int(meeting.duration / 60)) minutes" : "Duration not recorded"
+        
+        // Get language instruction based on meeting language
+        let languageInstruction = getLanguageInstruction(for: meeting.language)
+        
+        return """
+        You are an expert at extracting action items from meeting content. Analyze the provided meeting data and extract actionable tasks, commitments, and follow-up items.
+
+        MEETING DATA:
+        - Meeting Title: \(meeting.title)
+        - Date & Time: \(dateFormatter.string(from: meeting.date))
+        - Duration: \(duration)
+        - Audio Transcription: \(transcription)
+        - Handwritten Notes: \(handwrittenNotes)
+
+        INSTRUCTIONS:
+        1. Carefully analyze both the audio transcription and handwritten notes
+        2. Extract all actionable items, commitments, and follow-up tasks
+        3. For each action item, identify:
+           - The task or action to be completed
+           - Who is responsible (if mentioned)
+           - Priority level (urgent, high, medium, low)
+           - Due date or timeframe (if mentioned)
+           - Brief description or context
+
+        4. Format each action item as a JSON object with these fields:
+           - title: Brief, clear description of the action
+           - description: More detailed context (optional)
+           - assignee: Person responsible (empty if not specified)
+           - priority: "urgent", "high", "medium", or "low"
+           - dueDate: ISO date string (null if not specified)
+
+        5. Look for keywords like:
+           - "need to", "should", "must", "will", "going to"
+           - "follow up", "check", "review", "schedule", "contact"
+           - "by [date]", "next week", "tomorrow", "ASAP"
+           - Names followed by actions
+
+        6. Guidelines:
+           - Only extract clear, actionable items
+           - Avoid vague or general statements
+           - Prioritize items mentioned in handwritten notes
+           - If no clear action items exist, return empty array
+           - Use present tense for action titles
+
+        \(languageInstruction)
+
+        Return ONLY a valid JSON array of action items. Example format:
+        [
+          {
+            "title": "Follow up with client about contract",
+            "description": "Discuss pricing and timeline details",
+            "assignee": "John",
+            "priority": "high",
+            "dueDate": "2024-01-15"
+          }
+        ]
+
+        If no action items are found, return: []
+        """
+    }
+    
+    /// Parse action items from OpenAI response
+    private func parseActionItems(from response: String) -> [ActionItem] {
+        guard let data = response.data(using: .utf8) else {
+            print("❌ [DEBUG] Failed to convert response to data")
+            return []
+        }
+        
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            
+            let actionItemsData = try decoder.decode([ActionItemData].self, from: data)
+            
+            return actionItemsData.map { item in
+                ActionItem(
+                    title: item.title,
+                    description: item.description ?? "",
+                    assignee: item.assignee ?? "",
+                    dueDate: item.dueDate,
+                    priority: Priority(rawValue: item.priority) ?? .medium
+                )
+            }
+        } catch {
+            print("❌ [DEBUG] Failed to parse action items JSON: \(error)")
+            // Try to extract action items from plain text if JSON parsing fails
+            return extractActionItemsFromText(response)
+        }
+    }
+    
+    /// Fallback method to extract action items from plain text
+    private func extractActionItemsFromText(_ text: String) -> [ActionItem] {
+        let lines = text.components(separatedBy: .newlines)
+        var actionItems: [ActionItem] = []
+        
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Look for lines that start with common action item indicators
+            if trimmedLine.lowercased().hasPrefix("- ") ||
+               trimmedLine.lowercased().hasPrefix("* ") ||
+               trimmedLine.lowercased().hasPrefix("1. ") ||
+               trimmedLine.lowercased().hasPrefix("2. ") ||
+               trimmedLine.lowercased().hasPrefix("3. ") ||
+               trimmedLine.lowercased().hasPrefix("4. ") ||
+               trimmedLine.lowercased().hasPrefix("5. ") {
+                
+                // Clean up the line
+                let cleanedLine = trimmedLine.replacingOccurrences(of: "^[-\\*\\d\\. ]+", with: "", options: .regularExpression)
+                
+                if !cleanedLine.isEmpty && cleanedLine.count > 5 {
+                    let actionItem = ActionItem(
+                        title: cleanedLine,
+                        description: "",
+                        assignee: "",
+                        priority: .medium
+                    )
+                    actionItems.append(actionItem)
+                }
+            }
+        }
+        
+        print("✅ [DEBUG] Extracted \(actionItems.count) action items from plain text")
+        return actionItems
     }
     
     /// Get language-specific instruction for AI generation
@@ -350,4 +529,15 @@ enum OpenAIError: Error, LocalizedError {
             return "No content in OpenAI response"
         }
     }
+}
+
+// MARK: - Action Item Data Model
+
+/// Data structure for parsing action items from OpenAI response
+struct ActionItemData: Codable {
+    let title: String
+    let description: String?
+    let assignee: String?
+    let priority: String
+    let dueDate: Date?
 } 

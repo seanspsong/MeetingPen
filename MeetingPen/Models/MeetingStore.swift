@@ -13,6 +13,10 @@ class MeetingStore: ObservableObject {
     private let meetingsKey = "SavedMeetings"
     private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     
+    // Search optimization
+    private var searchCache: [String: [Meeting]] = [:]
+    private var meetingSearchableText: [UUID: String] = [:] // Cache searchable text
+    
     init() {
         loadMeetings()
     }
@@ -23,6 +27,7 @@ class MeetingStore: ObservableObject {
         let meeting = Meeting(title: title, participants: participants, location: location, tags: tags)
         meetings.insert(meeting, at: 0)
         currentMeeting = meeting
+        clearSearchCache()
         saveMeetings()
     }
     
@@ -30,6 +35,7 @@ class MeetingStore: ObservableObject {
         let meeting = Meeting(title: title, participants: participants, location: location, tags: tags, language: language)
         meetings.insert(meeting, at: 0)
         currentMeeting = meeting
+        clearSearchCache()
         saveMeetings()
         print("💾 Created new meeting '\(title)' with language: \(language.displayName)")
     }
@@ -42,6 +48,8 @@ class MeetingStore: ObservableObject {
             if currentMeeting?.id == meeting.id {
                 currentMeeting = updatedMeeting
             }
+            // Clear search cache since meeting content changed
+            clearSearchCache()
             saveMeetings()
         }
     }
@@ -54,6 +62,7 @@ class MeetingStore: ObservableObject {
         if currentMeeting?.id == meeting.id {
             currentMeeting = nil
         }
+        clearSearchCache()
         saveMeetings()
     }
     
@@ -329,6 +338,35 @@ class MeetingStore: ObservableObject {
         updateMeeting(updatedMeeting)
     }
     
+    /// Generate action items using OpenAI
+    /// - Parameters:
+    ///   - meeting: The meeting to generate action items for
+    ///   - completion: Completion handler with success/failure result
+    func generateActionItems(for meeting: Meeting, completion: @escaping (Result<Void, Error>) -> Void) {
+        print("📝 [DEBUG] Starting action items generation for meeting: \(meeting.title)")
+        
+        // Use OpenAI service to generate action items
+        OpenAIService.shared.generateActionItems(for: meeting) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let actionItems):
+                    print("✅ [DEBUG] Successfully generated \(actionItems.count) action items")
+                    
+                    // Update the meeting with generated action items
+                    var updatedMeeting = meeting
+                    updatedMeeting.aiAnalysis.actionItems = actionItems
+                    
+                    self?.updateMeeting(updatedMeeting)
+                    completion(.success(()))
+                    
+                case .failure(let error):
+                    print("❌ [DEBUG] Failed to generate action items: \(error.localizedDescription)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+    
     // MARK: - Search and Filter
     
     func searchMeetings(query: String) -> [Meeting] {
@@ -336,15 +374,57 @@ class MeetingStore: ObservableObject {
             return meetings
         }
         
-        return meetings.filter { meeting in
-            meeting.title.localizedCaseInsensitiveContains(query) ||
-            meeting.participants.joined(separator: " ").localizedCaseInsensitiveContains(query) ||
-            meeting.transcriptData.fullText.localizedCaseInsensitiveContains(query) ||
-            meeting.aiAnalysis.summary.localizedCaseInsensitiveContains(query) ||
-            meeting.handwritingData.allRecognizedText.localizedCaseInsensitiveContains(query) ||
-            meeting.tags.joined(separator: " ").localizedCaseInsensitiveContains(query) ||
-            meeting.location?.localizedCaseInsensitiveContains(query) == true
+        let lowercaseQuery = query.lowercased()
+        
+        // Check cache first
+        if let cachedResults = searchCache[lowercaseQuery] {
+            return cachedResults
         }
+        
+        // Build or update searchable text cache for meetings
+        updateSearchableTextCache()
+        
+        let results = meetings.filter { meeting in
+            guard let searchableText = meetingSearchableText[meeting.id] else { return false }
+            return searchableText.contains(lowercaseQuery)
+        }
+        
+        // Cache the results (limit cache size to prevent memory issues)
+        if searchCache.count < 100 {
+            searchCache[lowercaseQuery] = results
+        }
+        
+        return results
+    }
+    
+    /// Update the searchable text cache for all meetings
+    private func updateSearchableTextCache() {
+        for meeting in meetings {
+            // Only update if not already cached or if meeting was modified
+            if meetingSearchableText[meeting.id] == nil {
+                let searchableText = [
+                    meeting.title,
+                    meeting.participants.joined(separator: " "),
+                    meeting.tags.joined(separator: " "),
+                    meeting.location ?? "",
+                    meeting.aiAnalysis.summary,
+                    meeting.transcriptData.fullText,
+                    meeting.handwritingData.allRecognizedText
+                ].joined(separator: " ").lowercased()
+                
+                meetingSearchableText[meeting.id] = searchableText
+            }
+        }
+        
+        // Remove cached text for meetings that no longer exist
+        let meetingIds = Set(meetings.map { $0.id })
+        meetingSearchableText = meetingSearchableText.filter { meetingIds.contains($0.key) }
+    }
+    
+    /// Clear search cache when meetings are modified
+    private func clearSearchCache() {
+        searchCache.removeAll()
+        meetingSearchableText.removeAll()
     }
     
     func meetingsForDate(_ date: Date) -> [Meeting] {
@@ -462,6 +542,7 @@ class MeetingStore: ObservableObject {
                 decoder.dateDecodingStrategy = .iso8601
                 let decodedMeetings = try decoder.decode([Meeting].self, from: data)
                 meetings = decodedMeetings
+                clearSearchCache() // Clear cache after loading
                 print("💾 Successfully loaded \(meetings.count) meetings from storage")
                 return
             } catch {
@@ -474,6 +555,7 @@ class MeetingStore: ObservableObject {
         
         // Fallback to sample data if no saved meetings or decoding failed
         meetings = Meeting.sampleMeetings
+        clearSearchCache() // Clear cache after loading sample data
         print("💾 Loaded \(meetings.count) sample meetings")
         
         // Save the sample data so it persists
@@ -530,6 +612,7 @@ class MeetingStore: ObservableObject {
             decoder.dateDecodingStrategy = .iso8601
             let meeting = try decoder.decode(Meeting.self, from: data)
             meetings.insert(meeting, at: 0)
+            clearSearchCache()
             saveMeetings()
             return true
         } catch {
@@ -557,6 +640,7 @@ class MeetingStore: ObservableObject {
             decoder.dateDecodingStrategy = .iso8601
             let restoredMeetings = try decoder.decode([Meeting].self, from: data)
             meetings = restoredMeetings
+            clearSearchCache()
             saveMeetings()
             return true
         } catch {

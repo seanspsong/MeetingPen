@@ -189,6 +189,8 @@ struct MeetingDetailView: View {
                         Text(meeting.transcriptData.fullText)
                             .font(.body)
                             .textSelection(.enabled)
+                            .lineLimit(nil)
+                            .multilineTextAlignment(.leading)
                             .padding()
                             .background(Color(.systemGray6))
                             .cornerRadius(8)
@@ -263,8 +265,28 @@ struct MeetingDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if !meeting.aiAnalysis.actionItems.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Action Items")
-                            .font(.headline)
+                        HStack {
+                            Text("Action Items")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Button("Regenerate") {
+                                generateActionItems()
+                            }
+                            .font(.caption)
+                            .disabled(openAIService.isGenerating)
+                            
+                            Button("Clear") {
+                                var updatedMeeting = meeting
+                                updatedMeeting.aiAnalysis.actionItems = []
+                                meetingStore.updateMeeting(updatedMeeting)
+                                meeting = updatedMeeting
+                            }
+                            .font(.caption)
+                            .foregroundColor(.red)
+                        }
                         
                         ForEach(meeting.aiAnalysis.actionItems.indices, id: \.self) { index in
                             ActionItemRow(
@@ -273,27 +295,13 @@ struct MeetingDetailView: View {
                                     var updatedMeeting = meeting
                                     updatedMeeting.aiAnalysis.actionItems[index].status = status
                                     meetingStore.updateMeeting(updatedMeeting)
+                                    meeting = updatedMeeting
                                 }
                             )
                         }
                     }
                 } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "checklist.circle")
-                            .font(.system(size: 60))
-                            .foregroundColor(.secondary)
-                        
-                        Text("No Action Items")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                        
-                        Text("Action items will be extracted automatically from meeting content")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
+                    generateActionItemsCard
                 }
             }
             .padding()
@@ -429,6 +437,49 @@ struct MeetingDetailView: View {
                 }
                 .font(.caption)
                 .foregroundColor(.red)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+    }
+    
+    private var generateActionItemsCard: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checklist.circle")
+                .font(.system(size: 60))
+                .foregroundColor(.orange)
+            
+            Text("Generate Action Items")
+                .font(.headline)
+            
+            Text("Extract actionable tasks, commitments, and follow-up items from your meeting content")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            if openAIService.isGenerating {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Generating action items...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Button("Generate Action Items") {
+                    generateActionItems()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(meeting.transcriptData.fullText.isEmpty && meeting.handwritingData.allRecognizedText.isEmpty)
+            }
+            
+            if let error = openAIService.generationError {
+                Text("Error: \(error.localizedDescription)")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding()
@@ -574,6 +625,24 @@ struct MeetingDetailView: View {
             }
         }
     }
+    
+    private func generateActionItems() {
+        print("🤖 [DEBUG] User triggered action items generation")
+        
+        meetingStore.generateActionItems(for: meeting) { result in
+            switch result {
+            case .success():
+                print("✅ [DEBUG] Action items generated successfully")
+                // Update the local meeting object with the updated data
+                if let updatedMeeting = meetingStore.meetings.first(where: { $0.id == meeting.id }) {
+                    meeting = updatedMeeting
+                }
+            case .failure(let error):
+                print("❌ [DEBUG] Failed to generate action items: \(error.localizedDescription)")
+                // Error is already handled by the OpenAI service and displayed in the UI
+            }
+        }
+    }
 }
 
 struct ActionItemRow: View {
@@ -588,24 +657,58 @@ struct ActionItemRow: View {
             }) {
                 Image(systemName: actionItem.status == .completed ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(actionItem.status == .completed ? .green : .secondary)
+                    .font(.system(size: 20))
             }
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(actionItem.title)
                     .font(.body)
+                    .fontWeight(.medium)
                     .strikethrough(actionItem.status == .completed)
                     .foregroundColor(actionItem.status == .completed ? .secondary : .primary)
                 
-                if !actionItem.assignee.isEmpty {
-                    Text("Assigned to: \(actionItem.assignee)")
+                if !actionItem.description.isEmpty {
+                    Text(actionItem.description)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(2)
                 }
                 
-                if let dueDate = actionItem.dueDate {
-                    Text("Due: \(dueDate.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                HStack(spacing: 12) {
+                    if !actionItem.assignee.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.circle")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text(actionItem.assignee)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if let dueDate = actionItem.dueDate {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.caption)
+                                .foregroundColor(actionItem.isOverdue ? .red : .orange)
+                            Text(dueDate.formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption)
+                                .foregroundColor(actionItem.isOverdue ? .red : .orange)
+                                .fontWeight(actionItem.isOverdue ? .medium : .regular)
+                        }
+                    }
+                    
+                    // Priority indicator
+                    if actionItem.priority != .medium {
+                        HStack(spacing: 4) {
+                            Image(systemName: priorityIcon(for: actionItem.priority))
+                                .font(.caption)
+                                .foregroundColor(priorityColor(for: actionItem.priority))
+                            Text(actionItem.priority.displayName)
+                                .font(.caption)
+                                .foregroundColor(priorityColor(for: actionItem.priority))
+                        }
+                    }
                 }
             }
             
@@ -614,6 +717,24 @@ struct ActionItemRow: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(8)
+    }
+    
+    private func priorityIcon(for priority: Priority) -> String {
+        switch priority {
+        case .urgent: return "exclamationmark.triangle.fill"
+        case .high: return "exclamationmark.circle.fill"
+        case .medium: return "minus.circle"
+        case .low: return "arrow.down.circle"
+        }
+    }
+    
+    private func priorityColor(for priority: Priority) -> Color {
+        switch priority {
+        case .urgent: return .red
+        case .high: return .orange
+        case .medium: return .secondary
+        case .low: return .gray
+        }
     }
 }
 

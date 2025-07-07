@@ -158,9 +158,6 @@ class SpeechRecognitionService: NSObject, ObservableObject {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         
-        // Simply use the full text as the current content, replacing everything
-        // This prevents duplicates and confusion from partial sentence parsing
-        
         // Split into natural sentence boundaries
         let sentences = trimmedText.components(separatedBy: CharacterSet(charactersIn: ".!?"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -198,15 +195,108 @@ class SpeechRecognitionService: NSObject, ObservableObject {
         print("🎙️ Sentences: \(transcribedSentences.count)")
     }
     
+    /// Format sentences into proper paragraphs
+    private func formatIntoParagraphs(_ sentences: [String]) -> String {
+        guard !sentences.isEmpty else { return "" }
+        
+        var paragraphs: [String] = []
+        var currentParagraph: [String] = []
+        
+        for (index, sentence) in sentences.enumerated() {
+            let cleanSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanSentence.isEmpty else { continue }
+            
+            // Add sentence to current paragraph
+            currentParagraph.append(cleanSentence)
+            
+            // Determine if we should start a new paragraph based on:
+            // 1. Topic change indicators (certain keywords)
+            // 2. Natural pause points (every 3-4 sentences)
+            // 3. Question-answer patterns
+            let shouldBreakParagraph = shouldStartNewParagraph(
+                currentSentence: cleanSentence,
+                nextSentence: index + 1 < sentences.count ? sentences[index + 1] : nil,
+                currentParagraphLength: currentParagraph.count
+            )
+            
+            if shouldBreakParagraph && !currentParagraph.isEmpty {
+                // Complete current paragraph
+                let paragraphText = currentParagraph.joined(separator: ". ")
+                    .replacingOccurrences(of: ". .", with: ".")  // Fix double periods
+                    .replacingOccurrences(of: ". !", with: "!")  // Fix period before exclamation
+                    .replacingOccurrences(of: ". ?", with: "?")  // Fix period before question
+                
+                paragraphs.append(paragraphText)
+                currentParagraph = []
+            }
+        }
+        
+        // Add remaining sentences as final paragraph
+        if !currentParagraph.isEmpty {
+            let paragraphText = currentParagraph.joined(separator: ". ")
+                .replacingOccurrences(of: ". .", with: ".")
+                .replacingOccurrences(of: ". !", with: "!")
+                .replacingOccurrences(of: ". ?", with: "?")
+            paragraphs.append(paragraphText)
+        }
+        
+        // Join paragraphs with double line breaks for proper formatting
+        return paragraphs.joined(separator: "\n\n")
+    }
+    
+    /// Determine if a new paragraph should be started
+    private func shouldStartNewParagraph(currentSentence: String, nextSentence: String?, currentParagraphLength: Int) -> Bool {
+        let lowerSentence = currentSentence.lowercased()
+        let nextLowerSentence = nextSentence?.lowercased() ?? ""
+        
+        // Topic change indicators
+        let topicChangeKeywords = [
+            "now let's", "moving on", "next topic", "another point", "speaking of",
+            "on the other hand", "meanwhile", "in addition", "furthermore",
+            "however", "alternatively", "in contrast", "let me switch",
+            "changing topics", "regarding", "concerning", "as for"
+        ]
+        
+        // Check for topic change keywords in next sentence
+        for keyword in topicChangeKeywords {
+            if nextLowerSentence.contains(keyword) {
+                return true
+            }
+        }
+        
+        // Question-answer pattern detection
+        if currentSentence.hasSuffix("?") && !nextLowerSentence.hasPrefix("yes") && !nextLowerSentence.hasPrefix("no") {
+            return true
+        }
+        
+        // Natural break points (every 3-4 sentences)
+        if currentParagraphLength >= 4 {
+            return true
+        }
+        
+        // Speaker change indicators
+        let speakerChangeKeywords = [
+            "i think", "i believe", "in my opinion", "personally",
+            "from my perspective", "i would say", "actually",
+            "well", "so", "okay", "alright"
+        ]
+        
+        for keyword in speakerChangeKeywords {
+            if nextLowerSentence.hasPrefix(keyword) {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
     // Save transcription to meeting
     func saveTranscription(to meetingStore: MeetingStore, meetingId: UUID) {
         guard !transcribedText.isEmpty else { return }
         
         if let meeting = meetingStore.meetings.first(where: { $0.id == meetingId }) {
-            // Save the sentence-by-sentence breakdown as the transcript
-            let formattedTranscript = transcribedSentences.enumerated()
-                .map { "[\($0.offset + 1)] \($0.element)" }
-                .joined(separator: "\n")
+            // Format sentences into proper paragraphs
+            let formattedTranscript = formatIntoParagraphs(transcribedSentences)
             
             var updatedMeeting = meeting
             updatedMeeting.transcriptData.fullText = formattedTranscript.isEmpty ? transcribedText : formattedTranscript
@@ -214,7 +304,8 @@ class SpeechRecognitionService: NSObject, ObservableObject {
             // Use updateMeeting to ensure persistence
             meetingStore.updateMeeting(updatedMeeting)
             
-            print("💾 Saved transcription to meeting: \(transcribedSentences.count) sentences")
+            let paragraphCount = formattedTranscript.components(separatedBy: "\n\n").count
+            print("💾 Saved transcription to meeting: \(transcribedSentences.count) sentences in \(paragraphCount) paragraphs")
         }
     }
 }

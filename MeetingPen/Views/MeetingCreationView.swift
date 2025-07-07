@@ -39,8 +39,8 @@ struct MeetingCreationView: View {
                 
                 Spacer()
                 
-                Button("Create") {
-                    createMeetingOnly()
+                Button("Start") {
+                    createAndStartMeeting()
                 }
                 .foregroundColor(.blue)
                 .fontWeight(.medium)

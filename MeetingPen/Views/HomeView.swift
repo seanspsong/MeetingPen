@@ -8,10 +8,8 @@ struct HomeView: View {
     @State private var showingNewMeeting = false
     @State private var showingRecording = false
     @State private var meetingToRecord: Meeting?
-    
-    var filteredMeetings: [Meeting] {
-        meetingStore.searchMeetings(query: searchText)
-    }
+    @State private var filteredMeetings: [Meeting] = []
+    @State private var searchTask: Task<Void, Never>?
     
     // Group meetings by week
     var meetingsByWeek: [(weekNumber: String, weekRange: String, meetings: [Meeting])] {
@@ -73,6 +71,21 @@ struct HomeView: View {
         }
         .sheet(item: $selectedMeeting) { meeting in
             MeetingDetailView(meeting: meeting)
+        }
+        .onAppear {
+            // Initialize with all meetings
+            filteredMeetings = meetingStore.meetings
+        }
+        .onChange(of: searchText) { _, newValue in
+            performSearch(query: newValue)
+        }
+        .onChange(of: meetingStore.meetings) { _, _ in
+            // Refresh search when meetings change
+            performSearch(query: searchText)
+        }
+        .onDisappear {
+            // Cancel any pending search task
+            searchTask?.cancel()
         }
     }
     
@@ -271,6 +284,56 @@ struct HomeView: View {
             let startString = dateFormatter.string(from: weekStart)
             let endString = dateFormatter.string(from: weekEnd)
             return "\(startString) - \(endString)"
+        }
+    }
+    
+    /// Perform debounced, asynchronous search
+    private func performSearch(query: String) {
+        // Cancel any existing search task
+        searchTask?.cancel()
+        
+        // Create new search task with debouncing
+        searchTask = Task {
+            // Debounce: wait 300ms before searching
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            
+            // Check if task was cancelled
+            guard !Task.isCancelled else { return }
+            
+            // Perform search on background queue
+            let results = await performAsyncSearch(query: query, meetings: meetingStore.meetings)
+            
+            // Update UI on main thread
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                filteredMeetings = results
+            }
+        }
+    }
+    
+    /// Perform search asynchronously on background queue
+    private func performAsyncSearch(query: String, meetings: [Meeting]) async -> [Meeting] {
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInteractive).async {
+                if query.isEmpty {
+                    continuation.resume(returning: meetings)
+                    return
+                }
+                
+                let lowercaseQuery = query.lowercased()
+                let results = meetings.filter { meeting in
+                    // Optimized search - check cheaper fields first
+                    meeting.title.lowercased().contains(lowercaseQuery) ||
+                    meeting.participants.joined(separator: " ").lowercased().contains(lowercaseQuery) ||
+                    meeting.tags.joined(separator: " ").lowercased().contains(lowercaseQuery) ||
+                    meeting.location?.lowercased().contains(lowercaseQuery) == true ||
+                    meeting.aiAnalysis.summary.lowercased().contains(lowercaseQuery) ||
+                    meeting.transcriptData.fullText.lowercased().contains(lowercaseQuery) ||
+                    meeting.handwritingData.allRecognizedText.lowercased().contains(lowercaseQuery)
+                }
+                
+                continuation.resume(returning: results)
+            }
         }
     }
 }
