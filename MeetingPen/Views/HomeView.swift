@@ -39,9 +39,6 @@ struct HomeView: View {
                 // Header
                 headerView
                 
-                // Search Bar
-                searchBar
-                
                 // Meetings List
                 meetingsList
                 
@@ -96,6 +93,26 @@ struct HomeView: View {
                 
                 Spacer()
                 
+                // Search Bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    
+                    TextField("Search meetings...", text: $searchText)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    
+                    if !searchText.isEmpty {
+                        Button("Clear") {
+                            searchText = ""
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
+                .frame(maxWidth: 300)
+                
+                Spacer()
+                
                 // Stats
                 HStack(spacing: 20) {
                     StatView(title: "Total", value: "\(meetingStore.totalMeetings)")
@@ -108,27 +125,7 @@ struct HomeView: View {
         .background(Color(.systemGroupedBackground))
     }
     
-    // MARK: - Search Bar
-    
-    private var searchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
-            TextField("Search meetings...", text: $searchText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-            
-            if !searchText.isEmpty {
-                Button("Clear") {
-                    searchText = ""
-                }
-                .font(.caption)
-                .foregroundColor(.blue)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
+
     
     // MARK: - Meetings Grid
     
