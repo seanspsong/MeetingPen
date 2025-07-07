@@ -13,6 +13,26 @@ struct HomeView: View {
         meetingStore.searchMeetings(query: searchText)
     }
     
+    // Group meetings by week
+    var meetingsByWeek: [(weekNumber: String, weekRange: String, meetings: [Meeting])] {
+        let meetings = filteredMeetings
+        let grouped = Dictionary(grouping: meetings) { meeting in
+            weekNumber(for: meeting.date)
+        }
+        
+        return grouped.map { weekNumber, meetings in
+            let sortedMeetings = meetings.sorted { $0.date > $1.date }
+            let weekRange = weekDateRange(for: sortedMeetings.first?.date ?? Date())
+            return (weekNumber: weekNumber, weekRange: weekRange, meetings: sortedMeetings)
+        }
+        .sorted { weekGroup1, weekGroup2 in
+            // Sort by week number (most recent first)
+            let week1 = Int(weekGroup1.weekNumber.dropFirst()) ?? 0
+            let week2 = Int(weekGroup2.weekNumber.dropFirst()) ?? 0
+            return week1 > week2
+        }
+    }
+    
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -117,15 +137,40 @@ struct HomeView: View {
             if filteredMeetings.isEmpty {
                 emptyStateView
             } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                    ForEach(filteredMeetings) { meeting in
-                        MeetingCardView(meeting: meeting)
-                            .onTapGesture {
-                                selectedMeeting = meeting
+                LazyVStack(spacing: 24) {
+                    ForEach(meetingsByWeek, id: \.weekNumber) { weekGroup in
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Week header
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text("\(weekGroup.weekNumber) - \(weekGroup.weekRange)")
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.primary)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(weekGroup.meetings.count) meeting\(weekGroup.meetings.count == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
+                            .padding(.horizontal, 20)
+                            
+                            // Meetings grid for this week
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+                                ForEach(weekGroup.meetings) { meeting in
+                                    MeetingCardView(meeting: meeting)
+                                        .onTapGesture {
+                                            selectedMeeting = meeting
+                                        }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.top, 12)
             }
         }
         .refreshable {
@@ -185,6 +230,50 @@ struct HomeView: View {
             }
             .padding(.trailing, 20)
             .padding(.bottom, 20)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Get the week number for a given date (e.g., "W24", "W25")
+    private func weekNumber(for date: Date) -> String {
+        let calendar = Calendar.current
+        let weekOfYear = calendar.component(.weekOfYear, from: date)
+        return "W\(weekOfYear)"
+    }
+    
+    /// Get the week date range for a given date (e.g., "July 7 - 11")
+    private func weekDateRange(for date: Date) -> String {
+        let calendar = Calendar.current
+        
+        // Get the start of the week (Sunday or Monday depending on locale)
+        guard let weekStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start else {
+            return ""
+        }
+        
+        // Get the end of the week
+        guard let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) else {
+            return ""
+        }
+        
+        let dateFormatter = DateFormatter()
+        
+        // Check if start and end are in the same month
+        let startMonth = calendar.component(.month, from: weekStart)
+        let endMonth = calendar.component(.month, from: weekEnd)
+        
+        if startMonth == endMonth {
+            // Same month: "July 7 - 11"
+            dateFormatter.dateFormat = "MMMM d"
+            let startString = dateFormatter.string(from: weekStart)
+            let endDay = calendar.component(.day, from: weekEnd)
+            return "\(startString) - \(endDay)"
+        } else {
+            // Different months: "July 30 - Aug 5"
+            dateFormatter.dateFormat = "MMM d"
+            let startString = dateFormatter.string(from: weekStart)
+            let endString = dateFormatter.string(from: weekEnd)
+            return "\(startString) - \(endString)"
         }
     }
 }
