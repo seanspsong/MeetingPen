@@ -36,7 +36,13 @@ struct MeetingRecordingView: View {
         self._meeting = State(initialValue: meeting)
         self._isPresented = isPresented
         self.shouldStartRecording = shouldStartRecording
-        self._currentLanguage = State(initialValue: meeting.language)
+        
+        // Initialize with saved language from SpeechRecognitionService, not meeting language
+        let savedLanguage = SpeechRecognitionService.shared.getCurrentLanguage()
+        let matchingLanguage = MeetingLanguage.allCases.first { $0.speechRecognitionLocale == savedLanguage } ?? .english
+        self._currentLanguage = State(initialValue: matchingLanguage)
+        
+        print("🌍 [INIT] Saved language: \(savedLanguage), Using: \(matchingLanguage.displayName) (\(matchingLanguage.flag))")
     }
     
     var body: some View {
@@ -54,8 +60,17 @@ struct MeetingRecordingView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
+            // Sync meeting language with current language setting
+            if meeting.language != currentLanguage {
+                meeting.language = currentLanguage
+                meetingStore.updateMeeting(meeting)
+                print("🌍 [SYNC] Updated meeting language to: \(currentLanguage.displayName)")
+            }
+            
             // Configure language settings for the meeting
-            speechRecognitionService.configureLanguage(currentLanguage.speechRecognitionLocale)
+            Task {
+                await speechRecognitionService.configureLanguage(currentLanguage.speechRecognitionLocale)
+            }
             handwritingViewModel.configureLanguage(currentLanguage.handwritingRecognitionLocale)
             
             // Clear any previous transcription data when starting a new meeting
@@ -71,6 +86,14 @@ struct MeetingRecordingView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     self.startRecordingWithRetry()
                 }
+            }
+        }
+        .onReceive(speechRecognitionService.$currentLanguageIdentifier) { newLanguageIdentifier in
+            // Update UI when language changes from other sources
+            if let matchingLanguage = MeetingLanguage.allCases.first(where: { $0.speechRecognitionLocale == newLanguageIdentifier }),
+               matchingLanguage != currentLanguage {
+                currentLanguage = matchingLanguage
+                print("🌍 [UI] Language flag updated to: \(currentLanguage.displayName)")
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -254,7 +277,7 @@ struct MeetingRecordingView: View {
                             }
                         }
                         
-                        if speechRecognitionService.transcribedSentences.isEmpty {
+                        if speechRecognitionService.formattedParagraphs.isEmpty {
                             Text("Transcription will appear here when recording starts...")
                                 .font(.body)
                                 .foregroundColor(.secondary)
@@ -262,11 +285,71 @@ struct MeetingRecordingView: View {
                                 .padding(.horizontal, 8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ForEach(speechRecognitionService.transcribedSentences.indices, id: \.self) { index in
-                                    Text(speechRecognitionService.transcribedSentences[index])
-                                        .font(.body)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 12) {
+                                // Speaker summary header
+                                if speechRecognitionService.getSpeakerCount() > 1 {
+                                    HStack {
+                                        Image(systemName: "person.2.fill")
+                                            .foregroundColor(.blue)
+                                            .font(.caption)
+                                        Text("\(speechRecognitionService.getSpeakerCount()) speakers")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        if speechRecognitionService.isSpeakerSeparationAvailable() {
+                                            HStack(spacing: 2) {
+                                                Image(systemName: "waveform.badge.person")
+                                                    .foregroundColor(.blue)
+                                                    .font(.caption2)
+                                                Text("AI")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.blue)
+                                                    .fontWeight(.medium)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 8)
+                                }
+                                
+                                // Paragraphs with speaker context
+                                ForEach(speechRecognitionService.formattedParagraphs.indices, id: \.self) { index in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(speechRecognitionService.formattedParagraphs[index])
+                                            .font(.body)
+                                            .lineLimit(nil)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(Color(.systemGray6))
+                                                    .opacity(0.6)
+                                            )
+                                        
+                                        // Show speaker segments if available
+                                        if !speechRecognitionService.currentSpeakerSegments.isEmpty {
+                                            let relevantSegments = speechRecognitionService.currentSpeakerSegments.filter { segment in
+                                                speechRecognitionService.formattedParagraphs[index].contains(segment.text)
+                                            }
+                                            
+                                            if !relevantSegments.isEmpty {
+                                                HStack {
+                                                    ForEach(Array(Set(relevantSegments.compactMap { $0.speaker })), id: \.id) { speaker in
+                                                        HStack(spacing: 4) {
+                                                            Circle()
+                                                                .fill(Color.blue)
+                                                                .frame(width: 6, height: 6)
+                                                            Text(speaker.name)
+                                                                .font(.caption2)
+                                                                .foregroundColor(.secondary)
+                                                        }
+                                                    }
+                                                    Spacer()
+                                                }
+                                                .padding(.horizontal, 8)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             .padding(.horizontal, 8)
@@ -796,7 +879,9 @@ struct MeetingRecordingView: View {
         print("🌍 Speech recognition locale: \(language.speechRecognitionLocale)")
         print("🌍 Handwriting recognition locale: \(language.handwritingRecognitionLocale)")
         
-        speechRecognitionService.configureLanguage(language.speechRecognitionLocale)
+        Task {
+            await speechRecognitionService.configureLanguage(language.speechRecognitionLocale)
+        }
         handwritingViewModel.configureLanguage(language.handwritingRecognitionLocale)
         
         print("🌍 Both services reconfigured for new language")
@@ -837,7 +922,9 @@ struct MeetingRecordingView: View {
         if success {
             // Start live transcription with a longer delay to ensure recording is stable
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.speechRecognitionService.startTranscribing()
+                Task {
+                    await self.speechRecognitionService.startTranscribing()
+                }
             }
             print("🎤 Started recording and transcription for meeting: \(meeting.title)")
             return true
@@ -862,8 +949,10 @@ struct MeetingRecordingView: View {
         let recordingURL = audioRecordingService.stopRecording()
         
         // Stop transcription and save to meeting
-        speechRecognitionService.stopTranscribing()
-        speechRecognitionService.saveTranscription(to: meetingStore, meetingId: meeting.id)
+        Task {
+            await speechRecognitionService.stopTranscribing()
+            speechRecognitionService.saveTranscription(to: meetingStore, meetingId: meeting.id)
+        }
         
         // Save handwriting notes
         handwritingViewModel.saveToMeeting()

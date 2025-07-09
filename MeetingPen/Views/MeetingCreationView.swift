@@ -19,6 +19,16 @@ struct MeetingCreationView: View {
     init(isPresented: Binding<Bool>? = nil, onMeetingCreatedWithRecording: ((Meeting) -> Void)? = nil) {
         self.isPresented = isPresented
         self.onMeetingCreatedWithRecording = onMeetingCreatedWithRecording
+        
+        // Initialize with saved language setting
+        let savedLanguage = SpeechRecognitionService.shared.getCurrentLanguage()
+        let userDefaultsLanguage = UserDefaults.standard.string(forKey: "SpeechRecognitionLanguage") ?? "none"
+        let matchingLanguage = MeetingLanguage.allCases.first { $0.speechRecognitionLocale == savedLanguage } ?? .english
+        self._selectedLanguage = State(initialValue: matchingLanguage)
+        
+        print("🌍 [CREATION INIT] Service language: \(savedLanguage)")
+        print("🌍 [CREATION INIT] UserDefaults language: \(userDefaultsLanguage)")
+        print("🌍 [CREATION INIT] Initialized with: \(matchingLanguage.displayName) (\(matchingLanguage.speechRecognitionLocale))")
     }
     
     var body: some View {
@@ -79,6 +89,12 @@ struct MeetingCreationView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
+                    .onChange(of: selectedLanguage) { newLanguage in
+                        print("💾 [CREATION] Language picker changed to: \(newLanguage.displayName) (\(newLanguage.speechRecognitionLocale))")
+                        
+                        // Persist the language setting globally - both async and sync
+                        persistLanguageChange(newLanguage)
+                    }
                     
                     HStack {
                         Image(systemName: "info.circle")
@@ -167,6 +183,22 @@ struct MeetingCreationView: View {
             if title.isEmpty {
                 title = generateTimestampTitle()
             }
+            
+            // Verify and log the current language setting
+            let currentSavedLanguage = UserDefaults.standard.string(forKey: "SpeechRecognitionLanguage") ?? "none"
+            let serviceLanguage = SpeechRecognitionService.shared.getCurrentLanguage()
+            print("🌍 [CREATION APPEAR] Saved in UserDefaults: \(currentSavedLanguage)")
+            print("🌍 [CREATION APPEAR] Service language: \(serviceLanguage)")
+            print("🌍 [CREATION APPEAR] Selected language: \(selectedLanguage.displayName) (\(selectedLanguage.speechRecognitionLocale))")
+            
+            // Ensure consistency - if saved language differs from selected, update selected
+            let savedLanguage = UserDefaults.standard.string(forKey: "SpeechRecognitionLanguage")
+            if let saved = savedLanguage,
+               let matchingLanguage = MeetingLanguage.allCases.first(where: { $0.speechRecognitionLocale == saved }),
+               matchingLanguage != selectedLanguage {
+                selectedLanguage = matchingLanguage
+                print("🔄 [CREATION APPEAR] Updated selected language to match saved: \(matchingLanguage.displayName)")
+            }
         }
     }
     
@@ -223,6 +255,10 @@ struct MeetingCreationView: View {
     private func useTemplate(_ templateTitle: String, _ templateParticipants: [String]) {
         title = templateTitle
         participants = templateParticipants
+        
+        // Ensure current language is persisted when using templates
+        persistLanguageChange(selectedLanguage)
+        print("📝 [CREATION] Used template '\(templateTitle)' and persisted language: \(selectedLanguage.displayName)")
     }
     
     private func addParticipant() {
@@ -249,13 +285,36 @@ struct MeetingCreationView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         
+        // Ensure language is persisted before creating meeting
+        persistLanguageChange(selectedLanguage)
+        
         meetingStore.createMeeting(title: trimmedTitle, participants: participants, language: selectedLanguage)
         dismissView()
     }
     
-        private func createAndStartMeeting() {
+        private func persistLanguageChange(_ newLanguage: MeetingLanguage) {
+        // Immediate UserDefaults persistence (synchronous)
+        UserDefaults.standard.set(newLanguage.speechRecognitionLocale, forKey: "SpeechRecognitionLanguage")
+        UserDefaults.standard.synchronize()
+        print("💾 [CREATION] Immediately saved language to UserDefaults: \(newLanguage.speechRecognitionLocale)")
+        
+        // Verify the save worked
+        let verifyRead = UserDefaults.standard.string(forKey: "SpeechRecognitionLanguage")
+        print("✅ [CREATION] Verification read from UserDefaults: \(verifyRead ?? "nil")")
+        
+        // Also configure the service asynchronously
+        Task {
+            await SpeechRecognitionService.shared.configureLanguage(newLanguage.speechRecognitionLocale)
+            print("🔧 [CREATION] Speech service configured for: \(newLanguage.displayName)")
+        }
+    }
+    
+    private func createAndStartMeeting() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
+        
+        // Ensure language is persisted before creating meeting
+        persistLanguageChange(selectedLanguage)
         
         meetingStore.createMeeting(title: trimmedTitle, participants: participants, language: selectedLanguage)
         

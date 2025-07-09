@@ -183,17 +183,111 @@ struct MeetingDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if !meeting.transcriptData.fullText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Audio Transcript")
-                            .font(.headline)
+                        HStack {
+                            Text("Audio Transcript")
+                                .font(.headline)
+                            
+                            Spacer()
+                            
+                            // Speaker count badge
+                            if meeting.transcriptData.speakerCount > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.2")
+                                        .font(.caption)
+                                    Text("\(meeting.transcriptData.speakerCount) speaker\(meeting.transcriptData.speakerCount == 1 ? "" : "s")")
+                                        .font(.caption)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundColor(.blue)
+                                .cornerRadius(12)
+                            }
+                        }
                         
-                        Text(meeting.transcriptData.fullText)
-                            .font(.body)
-                            .textSelection(.enabled)
-                            .lineLimit(nil)
-                            .multilineTextAlignment(.leading)
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
+                        // Display transcript segments with speaker information if available
+                        if !meeting.transcriptData.segments.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(meeting.transcriptData.segments) { segment in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            // Speaker identification
+                                            if let speaker = segment.speaker {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "person.circle.fill")
+                                                        .foregroundColor(.blue)
+                                                        .font(.caption)
+                                                    Text(speaker.name)
+                                                        .font(.caption)
+                                                        .fontWeight(.medium)
+                                                        .foregroundColor(.blue)
+                                                }
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.blue.opacity(0.1))
+                                                .cornerRadius(8)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            // Timestamp
+                                            Text(segment.formattedTime)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        
+                                        Text(segment.text)
+                                            .font(.body)
+                                            .textSelection(.enabled)
+                                            .lineLimit(nil)
+                                            .multilineTextAlignment(.leading)
+                                            .padding()
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(8)
+                                    }
+                                }
+                            }
+                        } else {
+                            // Fallback to paragraph display for legacy transcripts
+                            let paragraphs = meeting.transcriptData.fullText.components(separatedBy: "\n\n")
+                                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                .filter { !$0.isEmpty }
+                            
+                            if paragraphs.count > 1 {
+                                // Display as separate paragraphs
+                                VStack(alignment: .leading, spacing: 16) {
+                                    ForEach(paragraphs.indices, id: \.self) { index in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack {
+                                                Text("Paragraph \(index + 1)")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                                Spacer()
+                                            }
+                                            
+                                            Text(paragraphs[index])
+                                                .font(.body)
+                                                .textSelection(.enabled)
+                                                .lineLimit(nil)
+                                                .multilineTextAlignment(.leading)
+                                                .padding()
+                                                .background(Color(.systemGray6))
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Display as single block if no paragraph breaks
+                                Text(meeting.transcriptData.fullText)
+                                    .font(.body)
+                                    .textSelection(.enabled)
+                                    .lineLimit(nil)
+                                    .multilineTextAlignment(.leading)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                            }
+                        }
                     }
                 } else {
                     VStack(spacing: 16) {

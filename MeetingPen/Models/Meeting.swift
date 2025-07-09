@@ -307,7 +307,7 @@ struct TranscriptWord: Codable, Equatable {
     }
 }
 
-struct Speaker: Identifiable, Codable, Equatable {
+struct Speaker: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     var name: String
     var identifier: String
@@ -322,7 +322,7 @@ struct Speaker: Identifiable, Codable, Equatable {
     }
 }
 
-struct VoiceProfile: Codable, Equatable {
+struct VoiceProfile: Codable, Equatable, Hashable {
     var pitch: Double
     var tone: Double
     var pace: Double

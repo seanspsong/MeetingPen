@@ -70,6 +70,12 @@ struct MeetingSettingsView: View {
                     if meeting.language != language {
                         meeting.language = language
                         hasChanges = true
+                        
+                        // Persist the language setting globally
+                        Task {
+                            await SpeechRecognitionService.shared.configureLanguage(language.speechRecognitionLocale)
+                        }
+                        print("💾 [SETTINGS] Language changed to: \(language.displayName)")
                     }
                 }
             }
